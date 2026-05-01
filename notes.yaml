@@ -77,3 +77,6 @@
 
 - desc: git add-commit-push
   run: git add . && git commit -m "periodic commit" && git push -u origin main
+
+- desc: ssh databox (ee)
+  run: ssh sergeyb@10.101.70.121
