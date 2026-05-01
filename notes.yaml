@@ -80,3 +80,6 @@
 
 - desc: ssh databox (ee)
   run: ssh sergeyb@10.101.70.121
+
+- desc: ssh office-notebook
+  run: ssh "sergey bychkov"@192.168.41.49
