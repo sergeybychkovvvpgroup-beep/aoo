@@ -1,8 +1,9 @@
 aoo() {
-  local raw selected meta action payload_b64 payload desc
+  local db selected id action payload_b64 payload desc
 
-  raw="$(
-python3 <<'PY'
+  db="$(mktemp)"
+
+  python3 > "$db" <<'PY'
 import os, yaml, re, base64
 
 root = os.path.expanduser("~/notes")
@@ -11,6 +12,8 @@ def one_line(text, limit=70):
     text = str(text or "").strip()
     text = re.sub(r"\s+", " ", text)
     return text if len(text) <= limit else text[:limit-3] + "..."
+
+idx = 0
 
 for dirpath, dirnames, filenames in os.walk(root):
     dirnames[:] = [d for d in dirnames if d not in [".git", ".obsidian", "_archive"]]
@@ -22,8 +25,7 @@ for dirpath, dirnames, filenames in os.walk(root):
         path = os.path.join(dirpath, filename)
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
+            data = yaml.safe_load(open(path, "r", encoding="utf-8"))
         except Exception:
             continue
 
@@ -44,28 +46,29 @@ for dirpath, dirnames, filenames in os.walk(root):
             if not desc:
                 continue
 
+            idx += 1
+
             if run:
-                display = f"RUN | {one_line(run, 70)} | ({desc})"
                 payload = base64.b64encode(run.encode()).decode()
-                print(f"{display}\tRUN\t{payload}\t{desc}")
+                display = f"RUN | {one_line(run, 70)} | ({desc})"
+                print(f"{idx}\tRUN\t{payload}\t{desc}\t{display}")
 
             elif note is not None:
                 note_text = str(note).strip()
                 if note_text:
-                    display = f"NOTE | {one_line(note_text, 70)} | ({desc})"
                     payload = base64.b64encode(note_text.encode()).decode()
-                    print(f"{display}\tNOTE\t{payload}\t{desc}")
+                    display = f"NOTE | {one_line(note_text, 70)} | ({desc})"
+                    print(f"{idx}\tNOTE\t{payload}\t{desc}\t{display}")
 PY
-  )"
 
-  if [[ -z "$raw" ]]; then
+  if [[ ! -s "$db" ]]; then
     echo "no yaml notes found in ~/notes"
+    rm -f "$db"
     return
   fi
 
   selected="$(
-    printf "%s\n" "$raw" |
-    cut -f1 |
+    awk -F '\t' '{print $1 " │ " $5}' "$db" |
     gum filter \
       --height 12 \
       --no-fuzzy \
@@ -73,15 +76,20 @@ PY
       --placeholder "Search..."
   )"
 
-  [ -z "$selected" ] && return
+  [ -z "$selected" ] && {
+    rm -f "$db"
+    return
+  }
 
-  meta="$(printf "%s\n" "$raw" | awk -F '\t' -v s="$selected" '$1 == s {print $2 "\t" $3 "\t" $4; exit}')"
+  id="$(printf "%s" "$selected" | awk -F ' │ ' '{print $1}')"
 
-  action="$(printf "%s" "$meta" | cut -f1)"
-  payload_b64="$(printf "%s" "$meta" | cut -f2)"
-  desc="$(printf "%s" "$meta" | cut -f3)"
+  action="$(awk -F '\t' -v id="$id" '$1 == id {print $2; exit}' "$db")"
+  payload_b64="$(awk -F '\t' -v id="$id" '$1 == id {print $3; exit}' "$db")"
+  desc="$(awk -F '\t' -v id="$id" '$1 == id {print $4; exit}' "$db")"
 
   payload="$(printf "%s" "$payload_b64" | base64 -d)"
+
+  rm -f "$db"
 
   if [[ "$action" == "RUN" ]]; then
     eval "$payload"
@@ -90,5 +98,4 @@ PY
     printf "%s\n" "$payload" | sed "s/^/    /"
     printf "\n"
   fi
-
 }

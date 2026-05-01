@@ -1,3 +1,6 @@
+- desc: print current public keys
+  run: cat ~/.ssh/*.pub
+
 - desc: sergeyb public keys
   note: |
     ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARtIO7eKVAUJgSPHTRXII0hkHphfqLigabON2sfZL9x sergey bychkov@DESKTOP-RIL950P
