@@ -1,6 +1,24 @@
 - desc: print current public keys
   run: cat ~/.ssh/*.pub
 
+- desc: ssh pve-beria-16
+  run: ssh root@10.115.0.16
+
+- desc: ssh pve-beria-17
+  run: ssh root@10.115.0.17
+
+- desc: ssh pve-beria-16-external-beeline
+  run: ssh -J vyos@213.221.20.181 root@10.115.0.16 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh vyos-beria-ext-mts
+  run: ssh sergeyb@212.248.114.155 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh vyos-kim
+  run: ssh rtadm@192.168.53.254
+
+- desc: ssh vyos-kim-jump
+  run: ssh -J vyos@192.168.1.60,root@10.8.0.6 rtadm@192.168.53.254
+
 - desc: sergeyb public keys
   note: |
     ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARtIO7eKVAUJgSPHTRXII0hkHphfqLigabON2sfZL9x sergey bychkov@DESKTOP-RIL950P
@@ -14,18 +32,36 @@
     ip-guest: 192.168.28.105
     ip-lan: 192.168.26.215
 
-- desc: vyos wan чашниково external
+- desc: ssh vyos-wan-chashnikovo-ext
   run: ssh sergeyb@178.238.119.166
 
-- desc: proxmox чашниково external tunnel localhost 8006
+- desc: ssh vyos-dhcp-chashnikovo-jump-ext
+  run: ssh -J sergeyb@178.238.119.166 sergeyb@192.168.27.251
+
+- desc: proxmox chashnikovo external tunnel localhost 8006
   run: ssh -L 8006:10.117.0.1:8006 sergeyb@178.238.119.166
 
-- desc: proxmox чашниково web local
+- desc: proxmox chashnikovo web local
   note: |
     https://10.117.0.1:8006
 
-- desc: omada чашниково external tunnel localhost 8443
+- desc: omada chashnikovo external tunnel localhost 8443
   run: ssh -L 8443:10.117.100.10:443 sergeyb@178.238.119.166
 
-- desc: internal химки beria wan router vyos 
+- desc: internal himki beria wan router vyos
   run: ssh sergeyb@192.168.43.254
+
+- desc: ssh vyos-wh (perepechino)
+  run: ssh rtadm@192.168.13.254
+
+- desc: ssh vyos-wh-ext (perepechino mts)
+  run: ssh rtadm@212.248.31.253 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh vyos-volga-ext
+  run: ssh rtadm@95.79.102.245 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh vyos-volga
+  run: ssh rtadm@192.168.103.254 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh beria-voip
+  run: ssh root@192.168.11.10 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
