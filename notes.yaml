@@ -65,3 +65,13 @@
 
 - desc: ssh beria-voip
   run: ssh root@192.168.11.10 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh pve-beria-03 (netrack)
+  run: ssh root@10.111.0.3
+
+- desc: ssh pve-beria-08 (netrack)
+  run: ssh root@10.111.0.8
+
+- desc: ssh pve-beria-10 (netrack)
+  run: ssh root@10.111.0.10
+
