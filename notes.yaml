@@ -103,3 +103,5 @@
 - desc: sudoers-visudo-nopasswd
   note: |
     sergeyb ALL=(ALL:ALL) NOPASSWD: ALL
+
+

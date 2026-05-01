@@ -1,0 +1,2 @@
+- desc: code-server
+  run: ssh sergeyb@192.168.1.28
