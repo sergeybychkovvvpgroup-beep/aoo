@@ -1,0 +1,5 @@
+- desc: ssh vyos-kim
+  run: ssh rtadm@192.168.53.254
+
+- desc: ssh vyos-kim-jump
+  run: ssh -J vyos@192.168.1.60,root@10.8.0.6 rtadm@192.168.53.254

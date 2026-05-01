@@ -1,0 +1,5 @@
+- desc: ssh vyos-volga-ext
+  run: ssh rtadm@95.79.102.245 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
+
+- desc: ssh vyos-volga
+  run: ssh rtadm@192.168.103.254 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa

@@ -1,0 +1,7 @@
+
+- desc: sergeyb public keys
+  note: |
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIARtIO7eKVAUJgSPHTRXII0hkHphfqLigabON2sfZL9x sergey bychkov@DESKTOP-RIL950P
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILCn9df9cTF+2xclpayA/3pDpXu0V8gHzamv4lqCZ4ti sergeyb@Macbook-Sergey.local
+    ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMLHFE7yxe/CeEPIV8et99VaceLnFXnIbzdGG9dIuC8J gitea
+    ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCH+gC6MycptIVWfhEkt7HgJEoXTghYrBD82Iqp1NMQ0ZdYlZJ0/lvi5ucgi0J1iXy5DCF3e4aTdHKg/FcFKzSCFYnqSrRICUSGNkQVzuRdDoswe1B1+deM6jpdI4YM5icjVslu+dLajeNXEK77Oi41F8noIIBHkanHs/ehmqO4trQgBPybrGCCqdSFSn/xL7D/0SduIKhsi6RQcrjO5dt/skFXEPD4yDNnr5mCnnCZ1AQSxD78h6lDcF7crEiZytkE78Fh4esp3zpf7joAfHKSwIzE86fl7A11iT9H9Rfn1vLSAMA37MoXYhLlw7OudOFz1vJZIrknpvOkn8xmF6zl /root/.ssh/id_rsa

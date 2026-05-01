@@ -1,0 +1,5 @@
+- desc: ssh vyos-wh (perepechino)
+  run: ssh rtadm@192.168.13.254
+
+- desc: ssh vyos-wh-ext (perepechino mts)
+  run: ssh rtadm@212.248.31.253 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
