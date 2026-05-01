@@ -24,6 +24,8 @@
 - desc: ssh pve-beria-16-external-beeline
   run: ssh -J vyos@213.221.20.181 root@10.115.0.16 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
 
+- desc: ssh vyosTest-himki-external-beeline
+  run: ssh vyos@213.221.20.181 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
 
 - desc: ssh vyos-beria-ext-mts
   run: ssh sergeyb@212.248.114.155 -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa
