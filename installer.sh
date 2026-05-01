@@ -31,7 +31,7 @@ aoo() {
   python3 > "$db" <<'"'"'PY'"'"'
 import os, yaml, re, base64
 
-root = os.path.expanduser("~/notes")
+root = os.path.expanduser("~/term-notes")
 
 def one_line(text, limit=70):
     text = str(text or "").strip()
