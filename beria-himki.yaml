@@ -1,3 +1,6 @@
+- desc: sing-box gateway himki 201
+  run: ssh sergeyb@10.115.250.201
+
 - desc: IPMI himki-beria-16
   note: |
     https://10.115.250.70 (behind firewall)
