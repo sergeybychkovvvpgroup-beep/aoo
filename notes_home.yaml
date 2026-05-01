@@ -1,2 +1,5 @@
 - desc: code-server
   run: ssh sergeyb@192.168.1.28
+
+- desc: sing-box vpn xray root 45
+  run: ssh root@192.168.1.45
