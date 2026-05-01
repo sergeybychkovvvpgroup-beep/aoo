@@ -75,3 +75,5 @@
 - desc: ssh pve-beria-10 (netrack)
   run: ssh root@10.111.0.10
 
+- desc: git add-commit-push
+  run: git add . && git commit -m "periodic commit" && git push -u origin main
