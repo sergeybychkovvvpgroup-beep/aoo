@@ -27,4 +27,5 @@
 - desc: omada чашниково external tunnel localhost 8443
   run: ssh -L 8443:10.117.100.10:443 sergeyb@178.238.119.166
 
-
+- desc: internal химки beria wan router vyos 
+  run: ssh sergeyb@192.168.43.254
