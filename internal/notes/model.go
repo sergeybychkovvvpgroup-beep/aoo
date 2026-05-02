@@ -21,8 +21,6 @@ type Entry struct {
 	Args       []Arg    `yaml:"args"`
 	Note       string   `yaml:"note"`
 	Banner     string   `yaml:"banner"`
-	Check      string   `yaml:"check"`
-	CheckError string   `yaml:"check_error"`
 	Tags       []string `yaml:"tags"`
 	SourcePath string   `yaml:"-"`
 	SourceFile string   `yaml:"-"`
@@ -63,7 +61,7 @@ func (e Entry) Title() string {
 }
 
 func (e Entry) SearchFields() []string {
-	fields := []string{e.Desc, e.Run, e.Template, e.Note, e.Banner, e.Check, e.CheckError, e.SourceFile}
+	fields := []string{e.Desc, e.Run, e.Template, e.Note, e.Banner, e.SourceFile}
 	for _, arg := range e.Args {
 		fields = append(fields, arg.Name, arg.Prompt, arg.Default, arg.Example, arg.Description)
 	}

@@ -78,4 +78,3 @@ aoo --theme nord
 
 - `examples/notes/` safe example notes for validation and demo
 - `cmd/`, `internal/` application code
-

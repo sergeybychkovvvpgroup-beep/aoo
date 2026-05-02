@@ -143,10 +143,6 @@ func runValidate(args []string, stdout, stderr io.Writer) error {
 }
 
 func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
-	if err := runPreCheck(entry, stdout, stderr); err != nil {
-		return err
-	}
-
 	if banner := strings.TrimSpace(entry.Banner); banner != "" {
 		fmt.Fprintln(stdout, renderBanner(entry.Desc, banner))
 	}
@@ -156,29 +152,6 @@ func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
-}
-
-func runPreCheck(entry notes.Entry, stdout, stderr io.Writer) error {
-	check := strings.TrimSpace(entry.Check)
-	if check == "" {
-		return nil
-	}
-
-	fmt.Fprintf(stdout, "[check] %s\n", entry.Desc)
-
-	cmd := exec.Command("/bin/sh", "-lc", check)
-	cmd.Stdin = nil
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(entry.CheckError)
-		if msg == "" {
-			msg = "pre-check failed"
-		}
-		return fmt.Errorf("%s\ncheck: %s", msg, check)
-	}
-
-	return nil
 }
 
 func runConfig(args []string, stdout, stderr io.Writer) error {
