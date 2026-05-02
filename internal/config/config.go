@@ -14,11 +14,15 @@ const (
 	envNotesDir       = "AOO_NOTES_DIR"
 	legacyEnvNotesDir = "TERM_NOTES_DIR"
 	envTheme          = "AOO_THEME"
+	envAppDir         = "AOO_APP_DIR"
 )
 
 type File struct {
-	NotesDir string `yaml:"notes_dir"`
-	Theme    string `yaml:"theme"`
+	NotesDir      string `yaml:"notes_dir"`
+	NotesRepo     string `yaml:"notes_repo"`
+	AppDir        string `yaml:"app_dir"`
+	Theme         string `yaml:"theme"`
+	LastRepoCheck string `yaml:"last_repo_check"`
 }
 
 type SetupRequiredError struct{}
@@ -72,7 +76,10 @@ func Load() (File, error) {
 	}
 
 	cfg.NotesDir = strings.TrimSpace(cfg.NotesDir)
+	cfg.NotesRepo = strings.TrimSpace(cfg.NotesRepo)
+	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
 	cfg.Theme = strings.TrimSpace(cfg.Theme)
+	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
 	return cfg, nil
 }
 
@@ -154,6 +161,82 @@ func SetNotesDir(dir string) (string, error) {
 		return "", err
 	}
 	cfg.NotesDir = path
+
+	if err := Save(cfg); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+func SetNotesRepo(repo string) error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.NotesRepo = strings.TrimSpace(repo)
+	return Save(cfg)
+}
+
+func SetLastRepoCheck(value string) error {
+	cfg, err := Load()
+	if err != nil {
+		return err
+	}
+	cfg.LastRepoCheck = strings.TrimSpace(value)
+	return Save(cfg)
+}
+
+func ResolveAppDir(cliValue string) (string, string, error) {
+	if value := strings.TrimSpace(cliValue); value != "" {
+		path, err := filepath.Abs(value)
+		return path, "flag --app-dir", err
+	}
+
+	if value := strings.TrimSpace(os.Getenv(envAppDir)); value != "" {
+		path, err := filepath.Abs(value)
+		return path, envAppDir, err
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		return "", "", err
+	}
+
+	if value := strings.TrimSpace(cfg.AppDir); value != "" {
+		path, err := filepath.Abs(value)
+		return path, "config", err
+	}
+
+	cwd, err := os.Getwd()
+	if err == nil {
+		if _, statErr := os.Stat(filepath.Join(cwd, "go.mod")); statErr == nil {
+			return cwd, "current directory", nil
+		}
+	}
+
+	return "", "", nil
+}
+
+func SetAppDir(dir string) (string, error) {
+	path, err := filepath.Abs(strings.TrimSpace(dir))
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("check app dir %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", path)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		return "", err
+	}
+	cfg.AppDir = path
 
 	if err := Save(cfg); err != nil {
 		return "", err

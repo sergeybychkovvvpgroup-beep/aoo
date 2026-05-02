@@ -161,13 +161,6 @@ func validateEntry(path string, line int, entry Entry) error {
 		}
 	}
 
-	if strings.TrimSpace(entry.Template) != "" && len(entry.Args) == 0 {
-		return ValidationError{
-			Path:    path,
-			Problem: fmt.Sprintf("template note %q at line %d must define args", entry.Desc, line),
-		}
-	}
-
 	return nil
 }
 

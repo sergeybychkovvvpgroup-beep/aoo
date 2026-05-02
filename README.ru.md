@@ -15,12 +15,19 @@ sudo install -m 0755 bin/aoo /usr/local/bin/aoo
 
 ## Первый запуск
 
-Храни реальные заметки вне репозитория:
+При первом запуске `aoo` может сам спросить URL notes repo и склонировать его в `~/.local/share/aoo/notes`.
+
+Либо можно настроить вручную:
 
 ```bash
+aoo set-source
 mkdir -p ~/.local/share/aoo/notes
 aoo set-folder ~/.local/share/aoo/notes
+aoo set-app-dir ~/workspace/aoo
 ```
+
+Если notes repo приватный, `aoo` покажет public key, который нужно добавить в Deploy Keys.
+`aoo` не делает auto-fetch notes repo на каждом старте, поэтому не должен постоянно дёргать passphrase от SSH key.
 
 Проверить конфиг:
 
@@ -64,6 +71,11 @@ aoo --theme nord
 ```
 
 `run` запускает команду, `note` печатает текст, `template` спрашивает аргументы и собирает итоговую команду.
+
+Встроенные переменные шаблонов:
+
+- `{{aoo_notes_dir}}`
+- `{{aoo_app_dir}}`
 
 ## Темы
 

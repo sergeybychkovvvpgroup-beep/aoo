@@ -17,9 +17,12 @@ type Prepared struct {
 	Values  map[string]string
 }
 
-func Prompt(entry notes.Entry, stdin io.Reader, stdout io.Writer) (Prepared, bool, error) {
+func Prompt(entry notes.Entry, stdin io.Reader, stdout io.Writer, baseValues map[string]string) (Prepared, bool, error) {
 	reader := bufio.NewReader(stdin)
-	values := make(map[string]string, len(entry.Args))
+	values := make(map[string]string, len(entry.Args)+len(baseValues))
+	for key, value := range baseValues {
+		values[key] = value
+	}
 
 	fmt.Fprintf(stdout, "[template] %s\n", entry.Desc)
 	for _, arg := range entry.Args {

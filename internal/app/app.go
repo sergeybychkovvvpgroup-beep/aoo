@@ -11,6 +11,7 @@ import (
 
 	"github.com/sergeyb/aoo/internal/config"
 	"github.com/sergeyb/aoo/internal/notes"
+	"github.com/sergeyb/aoo/internal/notesrepo"
 	"github.com/sergeyb/aoo/internal/templatecmd"
 	"github.com/sergeyb/aoo/internal/ui"
 )
@@ -26,8 +27,12 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runThemes(stdout)
 		case "config":
 			return runConfig(args[1:], stdout, stderr)
+		case "set-source":
+			return runSetSource(stdin, stdout, stderr)
 		case "set-folder":
 			return runSetFolder(args[1:], stdout, stderr)
+		case "set-app-dir":
+			return runSetAppDir(args[1:], stdout, stderr)
 		case "set-theme":
 			return runSetTheme(args[1:], stdout, stderr)
 		case "version", "--version", "-v":
@@ -57,7 +62,18 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 
 	root, _, err := config.ResolveNotesDir(*dir)
 	if err != nil {
-		return err
+		if _, ok := err.(config.SetupRequiredError); ok && strings.TrimSpace(*dir) == "" {
+			root, err = notesrepo.BootstrapIfNeeded(stdin, stdout, stderr)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	if status, statusErr := notesrepo.CheckStatus(root); statusErr == nil {
+		notesrepo.PrintHint(status, stdout)
 	}
 
 	result := notes.LoadDir(root)
@@ -97,7 +113,12 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 }
 
 func runTemplate(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) error {
-	prepared, confirmed, err := templatecmd.Prompt(entry, stdin, stdout)
+	values, err := builtInTemplateValues()
+	if err != nil {
+		return err
+	}
+
+	prepared, confirmed, err := templatecmd.Prompt(entry, stdin, stdout, values)
 	if err != nil {
 		return err
 	}
@@ -163,13 +184,22 @@ func runConfig(args []string, stdout, stderr io.Writer) error {
 	switch args[0] {
 	case "show":
 		return runConfigShow(stdout)
+	case "set-source":
+		return runSetSource(os.Stdin, stdout, stderr)
 	case "set-folder":
 		return runSetFolder(args[1:], stdout, stderr)
+	case "set-app-dir":
+		return runSetAppDir(args[1:], stdout, stderr)
 	case "set-theme":
 		return runSetTheme(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", args[0])
 	}
+}
+
+func runSetSource(stdin io.Reader, stdout, stderr io.Writer) error {
+	_, err := notesrepo.SetupSource(stdin, stdout, stderr)
+	return err
 }
 
 func runSetFolder(args []string, stdout, stderr io.Writer) error {
@@ -222,15 +252,43 @@ func runConfigShow(stdout io.Writer) error {
 	if themeErr != nil {
 		return themeErr
 	}
+	appDir, appSource, appErr := config.ResolveAppDir("")
+	if appErr != nil {
+		return appErr
+	}
 
 	fmt.Fprintf(stdout, "config file: %s\n", configPath)
 	fmt.Fprintf(stdout, "notes_dir: %s\n", emptyIfUnset(cfg.NotesDir))
+	fmt.Fprintf(stdout, "notes_repo: %s\n", emptyIfUnset(cfg.NotesRepo))
 	fmt.Fprintf(stdout, "active dir: %s\n", emptyIfUnset(root))
 	fmt.Fprintf(stdout, "active source: %s\n", source)
+	fmt.Fprintf(stdout, "app_dir: %s\n", emptyIfUnset(cfg.AppDir))
+	fmt.Fprintf(stdout, "active app dir: %s\n", emptyIfUnset(appDir))
+	fmt.Fprintf(stdout, "app dir source: %s\n", emptyIfUnset(appSource))
 	fmt.Fprintf(stdout, "theme: %s\n", emptyIfUnset(cfg.Theme))
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
 	return nil
+}
+
+func runSetAppDir(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("set-app-dir", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() != 1 {
+		return errors.New("usage: aoo set-app-dir /path/to/aoo")
+	}
+
+	path, err := config.SetAppDir(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(stdout, "configured app_dir: %s\n", path)
+	return err
 }
 
 func runSetTheme(args []string, stdout, stderr io.Writer) error {
@@ -299,7 +357,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  aoo                 open notes")
 	fmt.Fprintln(w, "  aoo validate        validate yaml notes")
+	fmt.Fprintln(w, "  aoo set-source      notes source wizard")
 	fmt.Fprintln(w, "  aoo set-folder DIR  set notes folder")
+	fmt.Fprintln(w, "  aoo set-app-dir DIR set aoo repo folder")
 	fmt.Fprintln(w, "  aoo set-theme NAME  set theme")
 	fmt.Fprintln(w, "  aoo themes          list themes")
 	fmt.Fprintln(w, "  aoo config show     show current config")
@@ -310,7 +370,9 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  aoo --query chash")
 	fmt.Fprintln(w, "  aoo --theme catppuccin-latte")
 	fmt.Fprintln(w, "  aoo --query nmap")
+	fmt.Fprintln(w, "  aoo set-source")
 	fmt.Fprintln(w, "  aoo set-folder ~/notes")
+	fmt.Fprintln(w, "  aoo set-app-dir ~/workspace/aoo")
 	fmt.Fprintln(w, "  aoo set-theme nord")
 }
 
@@ -318,6 +380,7 @@ func printConfigUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  aoo config show")
 	fmt.Fprintln(w, "  aoo config set-folder PATH")
+	fmt.Fprintln(w, "  aoo config set-app-dir PATH")
 	fmt.Fprintln(w, "  aoo config set-theme THEME")
 }
 
@@ -326,4 +389,23 @@ func emptyIfUnset(value string) string {
 		return "(not set)"
 	}
 	return value
+}
+
+func builtInTemplateValues() (map[string]string, error) {
+	values := map[string]string{}
+
+	notesDir, _, err := config.ResolveNotesDir("")
+	if err == nil && strings.TrimSpace(notesDir) != "" {
+		values["aoo_notes_dir"] = notesDir
+	}
+
+	appDir, _, err := config.ResolveAppDir("")
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(appDir) != "" {
+		values["aoo_app_dir"] = appDir
+	}
+
+	return values, nil
 }

@@ -15,12 +15,19 @@ sudo install -m 0755 bin/aoo /usr/local/bin/aoo
 
 ## First Run
 
-Store your real notes outside the repo:
+On first start, `aoo` can ask for your notes repo URL and clone it into `~/.local/share/aoo/notes`.
+
+You can also configure it manually:
 
 ```bash
+aoo set-source
 mkdir -p ~/.local/share/aoo/notes
 aoo set-folder ~/.local/share/aoo/notes
+aoo set-app-dir ~/workspace/aoo
 ```
+
+If the notes repo is private, `aoo` prints the public key that should be added to Deploy Keys.
+`aoo` does not auto-fetch notes repo on every start, so it will not keep asking for your SSH key passphrase.
 
 Check config:
 
@@ -64,6 +71,11 @@ aoo --theme nord
 ```
 
 `run` runs a command, `note` prints text, `template` asks for args and then builds the final command.
+
+Built-in template variables:
+
+- `{{aoo_notes_dir}}`
+- `{{aoo_app_dir}}`
 
 ## Themes
 
