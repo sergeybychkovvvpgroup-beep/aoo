@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"aoo/internal/bundled"
@@ -59,6 +60,10 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if message, ok := repoUpdateHint(); ok {
+		fmt.Fprintf(stdout, "[aoo] %s\n", message)
 	}
 
 	root, _, err := config.ResolveNotesDir(*dir)
@@ -435,4 +440,79 @@ func mergeEntries(primary, secondary []notes.Entry) []notes.Entry {
 	}
 
 	return merged
+}
+
+func repoUpdateHint() (string, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+
+	repoRoot, ok := detectAooRepoRoot(cwd)
+	if !ok {
+		return "", false
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", false
+	}
+	exePath, err = filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return "", false
+	}
+
+	if isWithinDir(exePath, repoRoot) {
+		return "", false
+	}
+
+	exeInfo, err := os.Stat(exePath)
+	if err != nil {
+		return "", false
+	}
+
+	checks := []string{
+		filepath.Join(repoRoot, "go.mod"),
+		filepath.Join(repoRoot, "internal", "bundled", "service.yaml"),
+		filepath.Join(repoRoot, "internal", "bundled", "command_templates.yaml"),
+	}
+
+	for _, path := range checks {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(exeInfo.ModTime()) {
+			return fmt.Sprintf("repo is newer than installed binary; run `sudo make update` or `./bin/aoo` from %s", repoRoot), true
+		}
+	}
+
+	return "", false
+}
+
+func detectAooRepoRoot(start string) (string, bool) {
+	dir := start
+	for {
+		if fileExists(filepath.Join(dir, "go.mod")) && fileExists(filepath.Join(dir, "internal", "bundled", "service.yaml")) {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func isWithinDir(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
