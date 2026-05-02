@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -121,7 +122,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	}
 
 	if selected.IsRun() {
-		return runCommand(*selected, stdout, stderr)
+		return runCommand(*selected, stdin, stdout, stderr)
 	}
 
 	printNote(*selected, stdout)
@@ -183,7 +184,16 @@ func loadBundledNotes() notes.LoadResult {
 	return bundled.Load()
 }
 
-func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
+func runCommand(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) error {
+	confirmed, err := promptCommandRun(entry.Desc, entry.Run, stdin, stdout)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		fmt.Fprintln(stdout, "cancelled")
+		return nil
+	}
+
 	if banner := strings.TrimSpace(entry.Banner); banner != "" {
 		fmt.Fprintln(stdout, renderBanner(entry.Desc, banner))
 	}
@@ -193,6 +203,22 @@ func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+func promptCommandRun(desc, command string, stdin io.Reader, stdout io.Writer) (bool, error) {
+	reader := bufio.NewReader(stdin)
+
+	fmt.Fprintf(stdout, "[run] %s\n", desc)
+	fmt.Fprintf(stdout, "\n[command]\n%s\n", command)
+	fmt.Fprint(stdout, "run? [y/N]: ")
+
+	answer, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	return answer == "y" || answer == "yes", nil
 }
 
 func runConfig(args []string, stdout, stderr io.Writer) error {

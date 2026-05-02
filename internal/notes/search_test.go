@@ -85,3 +85,14 @@ func TestFilterMatchesNumericTokensWithLeadingZeros(t *testing.T) {
 		t.Fatalf("unexpected second result: %s", results[1].Entry.Desc)
 	}
 }
+
+func TestEntryTypeTreatsTemplateAsRun(t *testing.T) {
+	entry := Entry{
+		Desc:     "ssh to host",
+		Template: "ssh {{user}}@{{host}}",
+	}
+
+	if got := entry.Type(); got != TypeRun {
+		t.Fatalf("expected template entry type %s, got %s", TypeRun, got)
+	}
+}

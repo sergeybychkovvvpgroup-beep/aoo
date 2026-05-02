@@ -1,9 +1,11 @@
 - desc: aoo rebuild and install
+  mode: run
   template: cd {{aoo_app_dir}} && make update
   args: []
   tags: [aoo, make, update]
 
 - desc: aoo git add commit push
+  mode: run
   template: cd {{aoo_app_dir}} && git add . && git commit -m "{{message}}" && git push
   args:
     - name: message
@@ -12,11 +14,13 @@
   tags: [aoo, git, push]
 
 - desc: aoo notes git pull
+  mode: run
   template: git -C {{aoo_notes_dir}} pull --rebase
   args: []
   tags: [notes, git, pull]
 
 - desc: aoo notes git add commit push
+  mode: run
   template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m "{{message}}" && git -C {{aoo_notes_dir}} push
   args:
     - name: message
@@ -25,6 +29,7 @@
   tags: [notes, git, push]
 
 - desc: ssh to host
+  mode: run
   template: ssh {{user}}@{{host}}
   args:
     - name: user

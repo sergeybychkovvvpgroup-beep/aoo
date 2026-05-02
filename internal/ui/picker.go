@@ -15,6 +15,8 @@ type PickerModel struct {
 	input     textinput.Model
 	entries   []notes.Entry
 	matches   []notes.Match
+	noteTypes []string
+	typeIndex int
 	cursor    int
 	width     int
 	height    int
@@ -38,9 +40,10 @@ func NewPicker(entries []notes.Entry, initialQuery string, theme Theme) PickerMo
 	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.HelpFG))
 
 	m := PickerModel{
-		input:   input,
-		entries: entries,
-		theme:   theme,
+		input:     input,
+		entries:   entries,
+		noteTypes: availableNoteTypes(entries),
+		theme:     theme,
 	}
 	m.refresh()
 	return m
@@ -81,6 +84,21 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 			return m, nil
+		case "left":
+			if len(m.noteTypes) > 1 {
+				m.typeIndex--
+				if m.typeIndex < 0 {
+					m.typeIndex = len(m.noteTypes) - 1
+				}
+				m.refresh()
+			}
+			return m, nil
+		case "right":
+			if len(m.noteTypes) > 1 {
+				m.typeIndex = (m.typeIndex + 1) % len(m.noteTypes)
+				m.refresh()
+			}
+			return m, nil
 		}
 	}
 
@@ -104,7 +122,7 @@ func (m PickerModel) View() string {
 		Padding(0, 0)
 	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DividerFG))
 
-	headerLines := []string{""}
+	headerLines := []string{m.renderTypeTabs(), ""}
 
 	var resultLines []string
 	contentWidth := m.contentWidth()
@@ -133,7 +151,7 @@ func (m PickerModel) View() string {
 	footerLines := []string{
 		"",
 		inputBox.Render(m.input.View()),
-		helpStyle.Render("enter open/run   esc quit   ↑↓ move"),
+		helpStyle.Render("enter open/run   esc quit   ←→ type   ↑↓ move"),
 	}
 
 	lines := make([]string, 0, len(headerLines)+len(resultLines)+len(footerLines)+8)
@@ -164,13 +182,85 @@ func (m PickerModel) Cancelled() bool {
 }
 
 func (m *PickerModel) refresh() {
-	m.matches = notes.Filter(m.entries, m.input.Value())
+	m.matches = notes.Filter(m.filteredEntries(), m.input.Value())
 	if m.cursor >= len(m.matches) {
 		m.cursor = len(m.matches) - 1
 	}
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+}
+
+func (m PickerModel) filteredEntries() []notes.Entry {
+	activeType := m.activeType()
+	if activeType == notes.TypeAll {
+		return m.entries
+	}
+
+	filtered := make([]notes.Entry, 0, len(m.entries))
+	for _, entry := range m.entries {
+		if entry.Type() == activeType {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func (m PickerModel) activeType() string {
+	if len(m.noteTypes) == 0 {
+		return notes.TypeAll
+	}
+	if m.typeIndex < 0 || m.typeIndex >= len(m.noteTypes) {
+		return notes.TypeAll
+	}
+	return m.noteTypes[m.typeIndex]
+}
+
+func (m PickerModel) renderTypeTabs() string {
+	baseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
+	activeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.SelectedFG)).
+		Background(lipgloss.Color(m.theme.SelectedBG)).
+		Bold(true).
+		Padding(0, 1)
+
+	parts := make([]string, 0, len(m.noteTypes))
+	activeType := m.activeType()
+	for _, noteType := range m.noteTypes {
+		label := noteType
+		if noteType == activeType {
+			parts = append(parts, activeStyle.Render(label))
+			continue
+		}
+		parts = append(parts, baseStyle.Render(" "+label+" "))
+	}
+	return strings.Join(parts, " ")
+}
+
+func availableNoteTypes(entries []notes.Entry) []string {
+	types := []string{notes.TypeAll}
+	seen := map[string]struct{}{
+		notes.TypeAll: {},
+	}
+
+	appendType := func(noteType string) {
+		if _, exists := seen[noteType]; exists {
+			return
+		}
+		seen[noteType] = struct{}{}
+		types = append(types, noteType)
+	}
+
+	for _, noteType := range []string{notes.TypeRun, notes.TypeShow} {
+		for _, entry := range entries {
+			if entry.Type() == noteType {
+				appendType(noteType)
+				break
+			}
+		}
+	}
+
+	return types
 }
 
 func (m PickerModel) visibleMatches() []notes.Match {

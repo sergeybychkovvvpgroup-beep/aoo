@@ -175,10 +175,32 @@ func validateEntry(path string, line int, entry Entry) error {
 		}
 	}
 
+	mode := strings.ToLower(strings.TrimSpace(entry.Mode))
+	if mode != "" && mode != "run" && mode != "show" {
+		return ValidationError{
+			Path:    path,
+			Problem: fmt.Sprintf("note %q at line %d has invalid mode %q, expected run or show", entry.Desc, line, entry.Mode),
+		}
+	}
+
 	if strings.TrimSpace(entry.Run) == "" && strings.TrimSpace(entry.Note) == "" && strings.TrimSpace(entry.Template) == "" {
 		return ValidationError{
 			Path:    path,
 			Problem: fmt.Sprintf("note %q at line %d must have run, template or note", entry.Desc, line),
+		}
+	}
+
+	if mode == "run" && strings.TrimSpace(entry.Run) == "" && strings.TrimSpace(entry.Template) == "" {
+		return ValidationError{
+			Path:    path,
+			Problem: fmt.Sprintf("note %q at line %d with mode run must have run or template", entry.Desc, line),
+		}
+	}
+
+	if mode == "show" && strings.TrimSpace(entry.Note) == "" {
+		return ValidationError{
+			Path:    path,
+			Problem: fmt.Sprintf("note %q at line %d with mode show must have note", entry.Desc, line),
 		}
 	}
 

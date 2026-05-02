@@ -16,6 +16,7 @@ type Arg struct {
 
 type Entry struct {
 	Desc       string   `yaml:"desc"`
+	Mode       string   `yaml:"mode"`
 	Run        string   `yaml:"run"`
 	Template   string   `yaml:"template"`
 	Args       []Arg    `yaml:"args"`
@@ -27,6 +28,12 @@ type Entry struct {
 	index      int
 }
 
+const (
+	TypeAll  = "ALL"
+	TypeRun  = "RUN"
+	TypeShow = "SHOW"
+)
+
 func (e Entry) IsRun() bool {
 	return strings.TrimSpace(e.Run) != ""
 }
@@ -35,14 +42,19 @@ func (e Entry) IsTemplate() bool {
 	return strings.TrimSpace(e.Template) != ""
 }
 
+func (e Entry) Type() string {
+	mode := strings.ToUpper(strings.TrimSpace(e.Mode))
+	if mode == TypeRun || mode == TypeShow {
+		return mode
+	}
+	if e.IsTemplate() || e.IsRun() {
+		return TypeRun
+	}
+	return TypeShow
+}
+
 func (e Entry) Action() string {
-	if e.IsTemplate() {
-		return "CMD"
-	}
-	if e.IsRun() {
-		return "RUN"
-	}
-	return "NOTE"
+	return e.Type()
 }
 
 func (e Entry) DisplayValue() string {

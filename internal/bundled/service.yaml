@@ -1,4 +1,5 @@
 - desc: aoo-help
+  mode: show
   note: |
     Built-in notes are available even on a clean host.
 
@@ -15,33 +16,41 @@
       theme
 
 - desc: aoo set source
+  mode: run
   run: aoo set-source
   tags: [aoo, setup, source]
 
 - desc: aoo config show
+  mode: run
   run: aoo config show
   tags: [aoo, config]
 
 - desc: aoo list themes
+  mode: run
   run: aoo themes
   tags: [aoo, theme]
 
 - desc: aoo version
+  mode: run
   run: aoo version
   tags: [aoo, version]
 
 - desc: aoo make build
+  mode: run
   run: make build
   tags: [aoo, make, build]
 
 - desc: aoo make update
+  mode: run
   run: sudo make update
   tags: [aoo, make, install, update]
 
 - desc: aoo make test
+  mode: run
   run: make test
   tags: [aoo, make, test]
 
 - desc: aoo make validate
+  mode: run
   run: make validate
   tags: [aoo, make, validate]
