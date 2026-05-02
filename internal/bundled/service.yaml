@@ -1,19 +1,34 @@
 - desc: aoo-help
   mode: show
   note: |
-    Built-in notes are available even on a clean host.
+    aoo = terminal notes + command launcher.
 
-    First setup:
-      1. run: aoo set source
-      2. choose repo or local folder
-      3. reopen aoo
+    Start:
+      aoo
+      aoo --query ssh
+
+    Setup notes source:
+      aoo set-source
+      aoo set-folder ~/.local/share/aoo/notes
+      aoo set-app-dir ~/workspace/aoo
+
+    Theme:
+      aoo themes
+      aoo set-theme nord
+      aoo --theme nord
+
+    Check config:
+      aoo config show
+
+    Validate notes:
+      aoo validate --dir ~/.local/share/aoo/notes
 
     Useful searches:
-      aoo
-      notes
+      ssh
+      vyos
       git
-      make
       theme
+      aoo
 
 - desc: aoo set source
   mode: run
