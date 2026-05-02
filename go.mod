@@ -1,4 +1,4 @@
-module github.com/sergeyb/aoo
+module aoo
 
 go 1.22.2
 

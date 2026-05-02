@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sergeyb/aoo/internal/config"
+	"aoo/internal/config"
 )
 
 type Status struct {

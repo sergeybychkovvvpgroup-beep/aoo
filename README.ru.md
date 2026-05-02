@@ -7,7 +7,7 @@
 ## Установка
 
 ```bash
-git clone https://github.com/sergeyb/aoo.git
+git clone <your-repo-url>
 cd aoo
 make build
 sudo install -m 0755 bin/aoo /usr/local/bin/aoo

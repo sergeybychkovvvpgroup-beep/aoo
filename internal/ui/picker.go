@@ -5,10 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"aoo/internal/notes"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sergeyb/aoo/internal/notes"
 )
 
 type PickerModel struct {

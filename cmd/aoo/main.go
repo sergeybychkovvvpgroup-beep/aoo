@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sergeyb/aoo/internal/app"
+	"aoo/internal/app"
 )
 
 func main() {

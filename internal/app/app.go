@@ -7,13 +7,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
-	"github.com/sergeyb/aoo/internal/config"
-	"github.com/sergeyb/aoo/internal/notes"
-	"github.com/sergeyb/aoo/internal/notesrepo"
-	"github.com/sergeyb/aoo/internal/templatecmd"
-	"github.com/sergeyb/aoo/internal/ui"
+	"aoo/internal/config"
+	"aoo/internal/notes"
+	"aoo/internal/notesrepo"
+	"aoo/internal/templatecmd"
+	"aoo/internal/ui"
 )
 
 const version = "0.1.0"
@@ -77,6 +78,13 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	}
 
 	result := notes.LoadDir(root)
+	if bundled := loadBundledNotes(stderr); len(bundled.Entries) > 0 || len(bundled.Errors) > 0 {
+		for _, loadErr := range bundled.Errors {
+			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
+		}
+		result.Entries = mergeEntries(result.Entries, bundled.Entries)
+	}
+
 	if len(result.Errors) > 0 {
 		for _, loadErr := range result.Errors {
 			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
@@ -161,6 +169,20 @@ func runValidate(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "ERROR: %v\n", loadErr)
 	}
 	return fmt.Errorf("validation failed: %d file(s) with errors", len(result.Errors))
+}
+
+func loadBundledNotes(stderr io.Writer) notes.LoadResult {
+	appDir, _, err := config.ResolveAppDir("")
+	if err != nil || strings.TrimSpace(appDir) == "" {
+		return notes.LoadResult{}
+	}
+
+	examplesDir := filepath.Join(appDir, "examples", "notes")
+	if _, statErr := os.Stat(examplesDir); statErr != nil {
+		return notes.LoadResult{}
+	}
+
+	return notes.LoadDir(examplesDir)
 }
 
 func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
@@ -408,4 +430,27 @@ func builtInTemplateValues() (map[string]string, error) {
 	}
 
 	return values, nil
+}
+
+func mergeEntries(primary, secondary []notes.Entry) []notes.Entry {
+	merged := make([]notes.Entry, 0, len(primary)+len(secondary))
+	seen := map[string]struct{}{}
+
+	appendEntry := func(entry notes.Entry) {
+		key := entry.Desc + "|" + entry.Action() + "|" + entry.DisplayValue()
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, entry)
+	}
+
+	for _, entry := range primary {
+		appendEntry(entry)
+	}
+	for _, entry := range secondary {
+		appendEntry(entry)
+	}
+
+	return merged
 }

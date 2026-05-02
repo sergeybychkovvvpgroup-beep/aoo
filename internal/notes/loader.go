@@ -86,11 +86,32 @@ func LoadDir(root string) LoadResult {
 	return result
 }
 
+func LoadBytes(path string, raw []byte) LoadResult {
+	var result LoadResult
+
+	entries, err := loadYAML(path, raw)
+	if err != nil {
+		result.Errors = append(result.Errors, err)
+		return result
+	}
+
+	for i := range entries {
+		entries[i].index = i + 1
+	}
+	result.Entries = entries
+	return result
+}
+
 func loadFile(path string) ([]Entry, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+
+	return loadYAML(path, raw)
+}
+
+func loadYAML(path string, raw []byte) ([]Entry, error) {
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
