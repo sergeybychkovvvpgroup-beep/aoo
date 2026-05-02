@@ -25,10 +25,13 @@ archives:
 nfpms:
   - id: packages
     package_name: aoo
-    vendor: sergeyb
-    homepage: https://github.com/sergeyb/aoo
-    maintainer: sergeyb
-    description: Fast terminal notes and command launcher
+    vendor: Sergey Bychkov
+    homepage: https://github.com/sergeybychkovvvpgroup-beep/aoo
+    maintainer: Sergey Bychkov
+    description: Terminal notes and command launcher with fuzzy search
     formats:
       - deb
     bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/aoo/README.md

@@ -25,6 +25,7 @@ type Entry struct {
 	Tags       []string `yaml:"tags"`
 	SourcePath string   `yaml:"-"`
 	SourceFile string   `yaml:"-"`
+	SourceLine int      `yaml:"-"`
 	index      int
 }
 

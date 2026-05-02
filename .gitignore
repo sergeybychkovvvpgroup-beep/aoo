@@ -3,3 +3,6 @@ dist/
 release/
 coverage.out
 notes/
+.DS_Store
+.idea/
+.vscode/

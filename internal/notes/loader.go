@@ -160,6 +160,7 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 
 		entry.SourcePath = path
 		entry.SourceFile = filepath.Base(path)
+		entry.SourceLine = node.Line
 		entry.Tags = normalizedTags(entry.Tags, entry.SourceFile)
 		entries = append(entries, entry)
 	}

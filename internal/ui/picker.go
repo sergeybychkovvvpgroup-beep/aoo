@@ -21,6 +21,7 @@ type PickerModel struct {
 	width     int
 	height    int
 	selected  *notes.Entry
+	edit      bool
 	cancelled bool
 	theme     Theme
 }
@@ -73,6 +74,14 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			entry := m.matches[m.cursor].Entry
 			m.selected = &entry
+			return m, tea.Quit
+		case "alt+e":
+			if len(m.matches) == 0 {
+				return m, nil
+			}
+			entry := m.matches[m.cursor].Entry
+			m.selected = &entry
+			m.edit = true
 			return m, tea.Quit
 		case "up", "ctrl+k":
 			if m.cursor > 0 {
@@ -151,7 +160,7 @@ func (m PickerModel) View() string {
 	footerLines := []string{
 		"",
 		inputBox.Render(m.input.View()),
-		helpStyle.Render("enter open/run   esc quit   ←→ type   ↑↓ move"),
+		helpStyle.Render("enter open/run   alt+e edit   esc quit   ←→ type   ↑↓ move"),
 	}
 
 	lines := make([]string, 0, len(headerLines)+len(resultLines)+len(footerLines)+8)
@@ -179,6 +188,10 @@ func (m PickerModel) Selected() *notes.Entry {
 
 func (m PickerModel) Cancelled() bool {
 	return m.cancelled
+}
+
+func (m PickerModel) EditRequested() bool {
+	return m.edit
 }
 
 func (m *PickerModel) refresh() {
@@ -318,25 +331,25 @@ func (m PickerModel) maxVisibleItems() int {
 	return maxItems
 }
 
-func RunPicker(entries []notes.Entry, initialQuery string, themeName string) (*notes.Entry, bool, error) {
+func RunPicker(entries []notes.Entry, initialQuery string, themeName string) (*notes.Entry, bool, bool, error) {
 	theme, err := ResolveTheme(themeName)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 
 	model := NewPicker(entries, initialQuery, theme)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	result, err := program.Run()
 	if err != nil {
-		return nil, false, fmt.Errorf("picker: %w", err)
+		return nil, false, false, fmt.Errorf("picker: %w", err)
 	}
 
 	finalModel, ok := result.(PickerModel)
 	if !ok {
-		return nil, false, fmt.Errorf("picker returned unexpected model type")
+		return nil, false, false, fmt.Errorf("picker returned unexpected model type")
 	}
 
-	return finalModel.Selected(), finalModel.Cancelled(), nil
+	return finalModel.Selected(), finalModel.Cancelled(), finalModel.EditRequested(), nil
 }
 
 func max(a, b int) int {

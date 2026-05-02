@@ -21,4 +21,4 @@ jobs:
       - name: Build
         run: go build -o bin/aoo ./cmd/aoo
       - name: Validate notes
-        run: ./bin/aoo validate --dir .
+        run: ./bin/aoo validate --dir ./examples/notes

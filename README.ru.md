@@ -1,16 +1,37 @@
 # aoo
 
-Быстрая терминальная утилита для заметок и запуска команд для self-hosted инфраструктуры.
+Быстрая терминальная утилита для заметок и запуска команд.
 
-Ищет YAML-заметки, показывает сниппеты, запускает сохранённые команды и умеет шаблоны команд с вопросами по аргументам.
+Храни заметки, команды, хосты и сниппеты в YAML. Используй fuzzy search по содержимому заметок, находи нужное за секунды и запускай команды прямо из заметок.
+
+![aoo demo](docs/demo.gif)
 
 ## Установка
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/sergeybychkovvvpgroup-beep/aoo.git
 cd aoo
 make build
 sudo install -m 0755 bin/aoo /usr/local/bin/aoo
+```
+
+Установка `.deb` вручную:
+
+```bash
+sudo dpkg -i ./aoo_<version>_amd64.deb
+```
+
+Установка из APT-репозитория:
+
+```bash
+curl -fsSL https://sergeybychkovvvpgroup-beep.github.io/aoo/public.key | \
+  sudo gpg --dearmor -o /usr/share/keyrings/aoo-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/aoo-archive-keyring.gpg] https://sergeybychkovvvpgroup-beep.github.io/aoo stable main" | \
+  sudo tee /etc/apt/sources.list.d/aoo.list
+
+sudo apt update
+sudo apt install aoo
 ```
 
 ## Первый запуск
@@ -52,17 +73,31 @@ aoo set-theme catppuccin-mocha
 aoo --theme nord
 ```
 
+Горячие клавиши в picker:
+
+```text
+Enter   открыть / запустить заметку
+Alt+E   открыть исходный YAML в $VISUAL / $EDITOR
+Esc     выйти
+Left/Right переключить ALL / RUN / SHOW
+Up/Down движение по списку
+```
+
 ## Формат заметок
 
 ```yaml
 - desc: example ssh
+  mode: run
   run: ssh admin@example.local
 
 - desc: example url
+  mode: show
   note: |
     https://service.example.local
 
 - desc: example nmap template
+  mode: run
+  tags: [nmap, scan]
   template: sudo nmap -O {{host}}
   args:
     - name: host
@@ -70,7 +105,16 @@ aoo --theme nord
       example: 192.168.1.1
 ```
 
-`run` запускает команду, `note` печатает текст, `template` спрашивает аргументы и собирает итоговую команду.
+Режимы:
+
+- `mode: run` запускает команду или template-команду
+- `mode: show` печатает текст
+
+Поведение:
+
+- `run` запускается после подтверждения
+- `template` спрашивает аргументы, показывает итоговую команду и просит подтверждение
+- `note` печатает текст
 
 Встроенные переменные шаблонов:
 
@@ -90,3 +134,13 @@ aoo --theme nord
 
 - `examples/notes/` безопасные example notes для демо и валидации
 - `cmd/`, `internal/` код утилиты
+- `internal/bundled/` встроенные help и starter notes
+- `docs/demo.gif` короткое терминальное демо
+- `docs/demo.tape` VHS-исходник для демо
+
+## Релизы
+
+- Тег вида `v0.2.0` запускает autobuild GitHub Release
+- Release workflow публикует tar.gz и `.deb` пакеты
+- Этот же workflow публикует подписанный APT-репозиторий в `gh-pages`
+- Перед использованием APT URL нужно включить GitHub Pages для ветки `gh-pages`

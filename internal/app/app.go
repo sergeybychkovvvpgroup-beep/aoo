@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"aoo/internal/bundled"
@@ -112,9 +113,12 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		return err
 	}
 
-	selected, cancelled, err := ui.RunPicker(result.Entries, *query, themeName)
+	selected, cancelled, editRequested, err := ui.RunPicker(result.Entries, *query, themeName)
 	if err != nil || cancelled || selected == nil {
 		return err
+	}
+	if editRequested {
+		return openEntryInEditor(*selected, stdout, stderr)
 	}
 
 	if selected.IsTemplate() {
@@ -368,6 +372,41 @@ func runThemes(stdout io.Writer) error {
 		fmt.Fprintf(stdout, "  %s\n", name)
 	}
 	return nil
+}
+
+func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
+	if strings.TrimSpace(entry.SourcePath) == "" {
+		return errors.New("selected note has no source file")
+	}
+	if !filepath.IsAbs(entry.SourcePath) {
+		return fmt.Errorf("selected note is bundled and cannot be edited from here: %s", entry.SourcePath)
+	}
+
+	editor := strings.TrimSpace(os.Getenv("VISUAL"))
+	if editor == "" {
+		editor = strings.TrimSpace(os.Getenv("EDITOR"))
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	parts := strings.Fields(editor)
+	if len(parts) == 0 {
+		return errors.New("editor command is empty")
+	}
+
+	args := []string{}
+	if entry.SourceLine > 0 {
+		args = append(args, "+"+strconv.Itoa(entry.SourceLine))
+	}
+	args = append(args, entry.SourcePath)
+	args = append(parts[1:], args...)
+
+	fmt.Fprintf(stdout, "[edit] %s\n", entry.SourcePath)
+	cmd := exec.Command(parts[0], args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd.Run()
 }
 
 func printNote(entry notes.Entry, stdout io.Writer) {

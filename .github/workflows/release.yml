@@ -1,0 +1,101 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev apt-utils gnupg
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Validate example notes
+        run: go run ./cmd/aoo validate --dir ./examples/notes
+
+      - name: Build GitHub release assets
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build APT repository
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APT_GPG_PRIVATE_KEY}" ] || [ -z "${APT_GPG_PASSPHRASE}" ]; then
+            echo "APT_GPG_PRIVATE_KEY and APT_GPG_PASSPHRASE secrets are required for APT publishing"
+            exit 1
+          fi
+
+          repo_dir="$(mktemp -d)"
+          mkdir -p "${repo_dir}/pool/main/a/aoo"
+          mkdir -p "${repo_dir}/dists/stable/main/binary-amd64"
+          mkdir -p "${repo_dir}/dists/stable/main/binary-arm64"
+
+          cp dist/*.deb "${repo_dir}/pool/main/a/aoo/"
+
+          pushd "${repo_dir}" >/dev/null
+          dpkg-scanpackages --arch amd64 pool /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -fk dists/stable/main/binary-amd64/Packages
+
+          dpkg-scanpackages --arch arm64 pool /dev/null > dists/stable/main/binary-arm64/Packages
+          gzip -fk dists/stable/main/binary-arm64/Packages
+
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="aoo" \
+            -o APT::FTPArchive::Release::Label="aoo" \
+            -o APT::FTPArchive::Release::Suite="stable" \
+            -o APT::FTPArchive::Release::Codename="stable" \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+            -o APT::FTPArchive::Release::Components="main" \
+            release dists/stable > dists/stable/Release
+
+          export GNUPGHOME
+          GNUPGHOME="$(mktemp -d)"
+          printf '%s' "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+          key_id="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')"
+
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${key_id}" --armor --detach-sign \
+            -o dists/stable/Release.gpg dists/stable/Release
+
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${APT_GPG_PASSPHRASE}" \
+            --default-key "${key_id}" --clearsign \
+            -o dists/stable/InRelease dists/stable/Release
+
+          gpg --batch --yes --export --armor "${key_id}" > public.key
+          popd >/dev/null
+
+          mv "${repo_dir}" apt-repo
+
+      - name: Publish APT repository to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./apt-repo
+          keep_files: true
