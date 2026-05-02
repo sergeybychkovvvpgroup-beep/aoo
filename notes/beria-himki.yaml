@@ -6,7 +6,7 @@
     https://10.115.250.70 (behind firewall)
 
 - desc: ssh office-notebook
-  run: ssh "sergey bychkov"@192.168.41.
+  run: ssh "sergey bychkov"@192.168.41.49
 
 
 - desc: internal himki beria wan router vyos

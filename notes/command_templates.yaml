@@ -1,0 +1,118 @@
+- desc: find files by name pattern
+  tags:
+    - template
+    - find
+    - files
+  template: find {{path}} -type f -name {{pattern}}
+  args:
+    - name: path
+      prompt: Path
+      default: .
+      example: /etc
+    - name: pattern
+      prompt: File name pattern
+      default: "*.yaml"
+      example: "*.conf"
+
+- desc: grep text in files recursively
+  tags:
+    - template
+    - grep
+    - search
+    - logs
+  template: grep -Rni --color=always {{pattern}} {{path}}
+  args:
+    - name: pattern
+      prompt: Text or regex
+      example: ERROR|CRITICAL
+    - name: path
+      prompt: Path
+      default: .
+      example: /var/log
+
+- desc: ssh to host
+  tags:
+    - template
+    - ssh
+    - connect
+  template: ssh {{user}}@{{host}}
+  args:
+    - name: user
+      prompt: Username
+      default: root
+      example: sergeyb
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.10
+
+- desc: mount cifs share
+  tags:
+    - template
+    - cifs
+    - mount
+  template: sudo mount -t cifs -o username={{username}} //{{server}}/{{share}} {{mountpoint}}
+  args:
+    - name: username
+      prompt: Username
+      default: admin
+    - name: server
+      prompt: Server or IP
+      example: 192.168.1.10
+    - name: share
+      prompt: Share name
+      example: backup
+    - name: mountpoint
+      prompt: Mount point
+      default: /mnt/share
+      example: /mnt/nas
+
+- desc: curl check url headers
+  tags:
+    - template
+    - curl
+    - http
+    - check
+  template: curl -kI {{url}}
+  args:
+    - name: url
+      prompt: URL
+      example: https://example.local:8443
+
+- desc: ping host 4 times
+  tags:
+    - template
+    - ping
+    - network
+    - check
+  template: ping -c 4 {{host}}
+  args:
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.1
+
+- desc: nmap os detect host
+  tags:
+    - template
+    - nmap
+    - scan
+  template: sudo nmap -O {{host}}
+  args:
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.1
+
+- desc: dig dns record
+  tags:
+    - template
+    - dns
+    - dig
+    - lookup
+  template: dig {{name}} {{record_type}} +short
+  args:
+    - name: name
+      prompt: DNS name
+      example: nas.example.local
+    - name: record_type
+      prompt: Record type
+      default: A
+      example: AAAA
