@@ -267,11 +267,8 @@ func runThemes(stdout io.Writer) error {
 }
 
 func printNote(entry notes.Entry, stdout io.Writer) {
-	fmt.Fprintf(stdout, "- desc: %s\n", entry.Desc)
-	fmt.Fprintln(stdout, "  note: |")
-	for _, line := range strings.Split(strings.TrimRight(entry.Note, "\n"), "\n") {
-		fmt.Fprintf(stdout, "    %s\n", line)
-	}
+	fmt.Fprintln(stdout, entry.Desc)
+	fmt.Fprintln(stdout, strings.TrimRight(entry.Note, "\n"))
 }
 
 func renderBanner(title, message string) string {

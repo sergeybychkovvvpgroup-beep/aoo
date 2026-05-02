@@ -1,12 +1,20 @@
 APP := aoo
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
 
-.PHONY: build test validate tidy snapshot
+.PHONY: build install test validate tidy snapshot
 
 build:
 	@echo "[build] compiling $(APP)"
 	@mkdir -p bin
 	@go build -o bin/$(APP) ./cmd/aoo
 	@echo "[build] done: bin/$(APP)"
+
+install: build
+	@echo "[install] installing $(APP) to $(BINDIR)"
+	@install -d "$(BINDIR)"
+	@install -m 0755 bin/$(APP) "$(BINDIR)/$(APP)"
+	@echo "[install] done: $(BINDIR)/$(APP)"
 
 test:
 	@echo "[test] running go test"
