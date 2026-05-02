@@ -60,8 +60,6 @@ aoo config show
 
 ```bash
 aoo
-aoo --query ssh
-aoo --query nmap
 aoo validate --dir ~/.local/share/aoo/notes
 ```
 
@@ -70,7 +68,6 @@ Themes:
 ```bash
 aoo themes
 aoo set-theme catppuccin-mocha
-aoo --theme nord
 ```
 
 Picker shortcuts:
