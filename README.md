@@ -21,19 +21,6 @@ Install `.deb` manually:
 sudo dpkg -i ./aoo_<version>_amd64.deb
 ```
 
-Install from APT repository:
-
-```bash
-curl -fsSL https://sergeybychkovvvpgroup-beep.github.io/aoo/public.key | \
-  sudo gpg --dearmor -o /usr/share/keyrings/aoo-archive-keyring.gpg
-
-echo "deb [signed-by=/usr/share/keyrings/aoo-archive-keyring.gpg] https://sergeybychkovvvpgroup-beep.github.io/aoo stable main" | \
-  sudo tee /etc/apt/sources.list.d/aoo.list
-
-sudo apt update
-sudo apt install aoo
-```
-
 ## First Run
 
 On first start, `aoo` can ask for your notes repo URL and clone it into `~/.local/share/aoo/notes`.
@@ -139,5 +126,3 @@ Built-in template variables:
 
 - Push a tag like `v0.2.0` to trigger GitHub Release autobuilds
 - Release workflow publishes tarballs and `.deb` packages
-- The same workflow publishes a signed APT repository to `gh-pages`
-- Enable GitHub Pages for the `gh-pages` branch before using the APT URL

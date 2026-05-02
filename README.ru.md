@@ -21,19 +21,6 @@ sudo install -m 0755 bin/aoo /usr/local/bin/aoo
 sudo dpkg -i ./aoo_<version>_amd64.deb
 ```
 
-Установка из APT-репозитория:
-
-```bash
-curl -fsSL https://sergeybychkovvvpgroup-beep.github.io/aoo/public.key | \
-  sudo gpg --dearmor -o /usr/share/keyrings/aoo-archive-keyring.gpg
-
-echo "deb [signed-by=/usr/share/keyrings/aoo-archive-keyring.gpg] https://sergeybychkovvvpgroup-beep.github.io/aoo stable main" | \
-  sudo tee /etc/apt/sources.list.d/aoo.list
-
-sudo apt update
-sudo apt install aoo
-```
-
 ## Первый запуск
 
 При первом запуске `aoo` может сам спросить URL notes repo и склонировать его в `~/.local/share/aoo/notes`.
@@ -142,5 +129,3 @@ Up/Down движение по списку
 
 - Тег вида `v0.2.0` запускает autobuild GitHub Release
 - Release workflow публикует tar.gz и `.deb` пакеты
-- Этот же workflow публикует подписанный APT-репозиторий в `gh-pages`
-- Перед использованием APT URL нужно включить GitHub Pages для ветки `gh-pages`
