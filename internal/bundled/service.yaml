@@ -1,0 +1,47 @@
+- desc: aoo-help
+  note: |
+    Built-in notes are available even on a clean host.
+
+    First setup:
+      1. run: aoo set source
+      2. choose repo or local folder
+      3. reopen aoo
+
+    Useful searches:
+      aoo
+      notes
+      git
+      make
+      theme
+
+- desc: aoo set source
+  run: aoo set-source
+  tags: [aoo, setup, source]
+
+- desc: aoo config show
+  run: aoo config show
+  tags: [aoo, config]
+
+- desc: aoo list themes
+  run: aoo themes
+  tags: [aoo, theme]
+
+- desc: aoo version
+  run: aoo version
+  tags: [aoo, version]
+
+- desc: aoo make build
+  run: make build
+  tags: [aoo, make, build]
+
+- desc: aoo make update
+  run: sudo make update
+  tags: [aoo, make, install, update]
+
+- desc: aoo make test
+  run: make test
+  tags: [aoo, make, test]
+
+- desc: aoo make validate
+  run: make validate
+  tags: [aoo, make, validate]

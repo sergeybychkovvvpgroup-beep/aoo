@@ -7,9 +7,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
+	"aoo/internal/bundled"
 	"aoo/internal/config"
 	"aoo/internal/notes"
 	"aoo/internal/notesrepo"
@@ -64,25 +64,28 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	root, _, err := config.ResolveNotesDir(*dir)
 	if err != nil {
 		if _, ok := err.(config.SetupRequiredError); ok && strings.TrimSpace(*dir) == "" {
-			root, err = notesrepo.BootstrapIfNeeded(stdin, stdout, stderr)
-			if err != nil {
-				return err
-			}
+			root = ""
 		} else {
 			return err
 		}
 	}
 
-	if status, statusErr := notesrepo.CheckStatus(root); statusErr == nil {
-		notesrepo.PrintHint(status, stdout)
+	if strings.TrimSpace(root) != "" {
+		if status, statusErr := notesrepo.CheckStatus(root); statusErr == nil {
+			notesrepo.PrintHint(status, stdout)
+		}
 	}
 
-	result := notes.LoadDir(root)
-	if bundled := loadBundledNotes(stderr); len(bundled.Entries) > 0 || len(bundled.Errors) > 0 {
-		for _, loadErr := range bundled.Errors {
+	result := notes.LoadResult{}
+	if strings.TrimSpace(root) != "" {
+		result = notes.LoadDir(root)
+	}
+
+	if bundledResult := loadBundledNotes(); len(bundledResult.Entries) > 0 || len(bundledResult.Errors) > 0 {
+		for _, loadErr := range bundledResult.Errors {
 			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
 		}
-		result.Entries = mergeEntries(result.Entries, bundled.Entries)
+		result.Entries = mergeEntries(result.Entries, bundledResult.Entries)
 	}
 
 	if len(result.Errors) > 0 {
@@ -95,7 +98,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	}
 
 	if len(result.Entries) == 0 {
-		return fmt.Errorf("no notes found in %s", root)
+		return errors.New("no notes found")
 	}
 
 	themeName, _, err := config.ResolveTheme(*themeFlag)
@@ -171,18 +174,8 @@ func runValidate(args []string, stdout, stderr io.Writer) error {
 	return fmt.Errorf("validation failed: %d file(s) with errors", len(result.Errors))
 }
 
-func loadBundledNotes(stderr io.Writer) notes.LoadResult {
-	appDir, _, err := config.ResolveAppDir("")
-	if err != nil || strings.TrimSpace(appDir) == "" {
-		return notes.LoadResult{}
-	}
-
-	examplesDir := filepath.Join(appDir, "examples", "notes")
-	if _, statErr := os.Stat(examplesDir); statErr != nil {
-		return notes.LoadResult{}
-	}
-
-	return notes.LoadDir(examplesDir)
+func loadBundledNotes() notes.LoadResult {
+	return bundled.Load()
 }
 
 func runCommand(entry notes.Entry, stdout, stderr io.Writer) error {
@@ -376,26 +369,15 @@ func renderBanner(title, message string) string {
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "aoo")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  aoo                 open notes")
-	fmt.Fprintln(w, "  aoo validate        validate yaml notes")
-	fmt.Fprintln(w, "  aoo set-source      notes source wizard")
-	fmt.Fprintln(w, "  aoo set-folder DIR  set notes folder")
-	fmt.Fprintln(w, "  aoo set-app-dir DIR set aoo repo folder")
-	fmt.Fprintln(w, "  aoo set-theme NAME  set theme")
-	fmt.Fprintln(w, "  aoo themes          list themes")
-	fmt.Fprintln(w, "  aoo config show     show current config")
-	fmt.Fprintln(w, "  aoo version")
+	fmt.Fprintln(w, "Terminal notes and command launcher.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  aoo")
-	fmt.Fprintln(w, "  aoo --query chash")
-	fmt.Fprintln(w, "  aoo --theme catppuccin-latte")
-	fmt.Fprintln(w, "  aoo --query nmap")
+	fmt.Fprintln(w, "Run `aoo` and search for `aoo-help`.")
+	fmt.Fprintln(w, "Built-in setup/help notes are available on a clean host.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Extra commands:")
+	fmt.Fprintln(w, "  aoo version")
+	fmt.Fprintln(w, "  aoo validate --dir PATH")
 	fmt.Fprintln(w, "  aoo set-source")
-	fmt.Fprintln(w, "  aoo set-folder ~/notes")
-	fmt.Fprintln(w, "  aoo set-app-dir ~/workspace/aoo")
-	fmt.Fprintln(w, "  aoo set-theme nord")
 }
 
 func printConfigUsage(w io.Writer) {

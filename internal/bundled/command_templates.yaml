@@ -1,0 +1,36 @@
+- desc: aoo rebuild and install
+  template: cd {{aoo_app_dir}} && make update
+  args: []
+  tags: [aoo, make, update]
+
+- desc: aoo git add commit push
+  template: cd {{aoo_app_dir}} && git add . && git commit -m "{{message}}" && git push
+  args:
+    - name: message
+      prompt: Commit message
+      example: update aoo
+  tags: [aoo, git, push]
+
+- desc: aoo notes git pull
+  template: git -C {{aoo_notes_dir}} pull --rebase
+  args: []
+  tags: [notes, git, pull]
+
+- desc: aoo notes git add commit push
+  template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m "{{message}}" && git -C {{aoo_notes_dir}} push
+  args:
+    - name: message
+      prompt: Commit message
+      example: update notes
+  tags: [notes, git, push]
+
+- desc: ssh to host
+  template: ssh {{user}}@{{host}}
+  args:
+    - name: user
+      prompt: SSH user
+      example: root
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.10
+  tags: [ssh]
