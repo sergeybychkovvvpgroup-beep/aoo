@@ -1,6 +1,0 @@
-- desc: print current public keys
-  run: cat ~/.ssh/*.pub
-
-
-- desc: git add-commit-push
-  run: git add . && git commit -m "periodic commit" && git push -u origin main

@@ -13,10 +13,12 @@ import (
 const (
 	envNotesDir       = "AOO_NOTES_DIR"
 	legacyEnvNotesDir = "TERM_NOTES_DIR"
+	envTheme          = "AOO_THEME"
 )
 
 type File struct {
 	NotesDir string `yaml:"notes_dir"`
+	Theme    string `yaml:"theme"`
 }
 
 type SetupRequiredError struct{}
@@ -70,6 +72,7 @@ func Load() (File, error) {
 	}
 
 	cfg.NotesDir = strings.TrimSpace(cfg.NotesDir)
+	cfg.Theme = strings.TrimSpace(cfg.Theme)
 	return cfg, nil
 }
 
@@ -157,6 +160,46 @@ func SetNotesDir(dir string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func ResolveTheme(cliValue string) (string, string, error) {
+	if value := strings.TrimSpace(cliValue); value != "" {
+		return value, "flag --theme", nil
+	}
+
+	if value := strings.TrimSpace(os.Getenv(envTheme)); value != "" {
+		return value, envTheme, nil
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		return "", "", err
+	}
+
+	if value := strings.TrimSpace(cfg.Theme); value != "" {
+		return value, "config", nil
+	}
+
+	return "auto", "default", nil
+}
+
+func SetTheme(theme string) (string, error) {
+	theme = strings.TrimSpace(theme)
+	if theme == "" {
+		return "", errors.New("theme name is required")
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		return "", err
+	}
+	cfg.Theme = theme
+
+	if err := Save(cfg); err != nil {
+		return "", err
+	}
+
+	return theme, nil
 }
 
 func hasVisibleYAML(matches []string) bool {

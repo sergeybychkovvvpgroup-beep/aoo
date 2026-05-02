@@ -1,4 +1,0 @@
-
-- desc: ssh databox (ee)
-  run: ssh sergeyb@10.101.70.121
-

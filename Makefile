@@ -14,8 +14,8 @@ test:
 	@echo "[test] done"
 
 validate: build
-	@echo "[validate] checking notes in ./notes"
-	@./bin/$(APP) validate --dir ./notes
+	@echo "[validate] checking notes in ./examples/notes"
+	@./bin/$(APP) validate --dir ./examples/notes
 	@echo "[validate] done"
 
 tidy:

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,29 +20,27 @@ type PickerModel struct {
 	height    int
 	selected  *notes.Entry
 	cancelled bool
+	theme     Theme
 }
 
 type doneMsg struct{}
 
-var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	detailStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	helpStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-)
-
-func NewPicker(entries []notes.Entry, initialQuery string) PickerModel {
+func NewPicker(entries []notes.Entry, initialQuery string, theme Theme) PickerModel {
 	input := textinput.New()
-	input.Placeholder = "Search notes"
+	input.Placeholder = "search"
 	input.Prompt = "notes> "
 	input.SetValue(initialQuery)
 	input.Focus()
 	input.CharLimit = 256
-	input.Width = 64
+	input.Width = 48
+	input.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.InputFG))
+	input.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.InputPrompt))
+	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.HelpFG))
 
 	m := PickerModel{
 		input:   input,
 		entries: entries,
+		theme:   theme,
 	}
 	m.refresh()
 	return m
@@ -56,6 +55,9 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.width > 8 {
+			m.input.Width = m.width - 8
+		}
 		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -89,28 +91,67 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m PickerModel) View() string {
-	var lines []string
-	lines = append(lines, titleStyle.Render("aoo"))
-	lines = append(lines, m.input.View())
-	lines = append(lines, "")
+	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.RowFG))
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.SelectedFG)).
+		Background(lipgloss.Color(m.theme.SelectedBG)).
+		Bold(true)
+	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DetailFG))
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
+	inputBox := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.InputFG)).
+		Background(lipgloss.Color(m.theme.InputBG)).
+		Padding(0, 0)
+	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DividerFG))
+
+	headerLines := []string{""}
+
+	var resultLines []string
+	contentWidth := m.contentWidth()
 
 	if len(m.matches) == 0 {
-		lines = append(lines, detailStyle.Render("No matches"))
+		resultLines = append(resultLines, detailStyle.Render("No matches"))
 	} else {
-		for i, match := range m.visibleMatches() {
+		visible := m.visibleMatches()
+		for i, match := range visible {
 			prefix := "  "
-			label := match.Label
+			labelText := truncateRunes(match.Label, contentWidth-3)
+			label := rowStyle.Render(labelText)
 			if i+m.offset() == m.cursor {
-				prefix = "> "
-				label = selectedStyle.Render(label)
+				prefix = m.theme.SelectedMark + " "
+				label = selectedStyle.Render(padRight(labelText, contentWidth-3))
 			}
-			lines = append(lines, prefix+label)
-			lines = append(lines, "    "+detailStyle.Render(match.Detail))
+			resultLines = append(resultLines, prefix+label)
+			detailText := truncateRunes(match.Detail, maxInt(10, contentWidth-4))
+			resultLines = append(resultLines, "    "+detailStyle.Render(detailText))
+			if i != len(visible)-1 {
+				resultLines = append(resultLines, "    "+dividerStyle.Render("·"))
+			}
 		}
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, helpStyle.Render("Enter: open/run  Esc: quit  Up/Down: move"))
+	footerLines := []string{
+		"",
+		inputBox.Render(m.input.View()),
+		helpStyle.Render("enter open/run   esc quit   ↑↓ move"),
+	}
+
+	lines := make([]string, 0, len(headerLines)+len(resultLines)+len(footerLines)+8)
+	lines = append(lines, headerLines...)
+	lines = append(lines, resultLines...)
+
+	if m.height > 0 {
+		used := len(headerLines) + len(resultLines) + len(footerLines)
+		if filler := m.height - used; filler > 0 {
+			for i := 0; i < filler; i++ {
+				lines = append(lines, "")
+			}
+		}
+	} else {
+		lines = append(lines, "")
+	}
+
+	lines = append(lines, footerLines...)
 	return strings.Join(lines, "\n")
 }
 
@@ -137,15 +178,7 @@ func (m PickerModel) visibleMatches() []notes.Match {
 		return nil
 	}
 
-	available := m.height - 6
-	if available < 3 {
-		available = 6
-	}
-
-	maxItems := available / 2
-	if maxItems < 5 {
-		maxItems = 5
-	}
+	maxItems := m.maxVisibleItems()
 
 	start := m.offset()
 	end := start + maxItems
@@ -160,10 +193,7 @@ func (m PickerModel) offset() int {
 	if len(m.matches) == 0 {
 		return 0
 	}
-	window := 5
-	if m.height > 0 {
-		window = max(5, (m.height-6)/2)
-	}
+	window := m.maxVisibleItems()
 
 	if m.cursor < window/2 {
 		return 0
@@ -180,8 +210,31 @@ func (m PickerModel) offset() int {
 	return start
 }
 
-func RunPicker(entries []notes.Entry, initialQuery string) (*notes.Entry, bool, error) {
-	model := NewPicker(entries, initialQuery)
+func (m PickerModel) maxVisibleItems() int {
+	available := m.height - 7
+	if available < 6 {
+		available = 6
+	}
+
+	// One item uses:
+	// 1 line for title
+	// 1 line for detail
+	// 1 separator line between items
+	// => n items take roughly 3n-1 lines.
+	maxItems := (available + 1) / 3
+	if maxItems < 2 {
+		maxItems = 2
+	}
+	return maxItems
+}
+
+func RunPicker(entries []notes.Entry, initialQuery string, themeName string) (*notes.Entry, bool, error) {
+	theme, err := ResolveTheme(themeName)
+	if err != nil {
+		return nil, false, err
+	}
+
+	model := NewPicker(entries, initialQuery, theme)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	result, err := program.Run()
 	if err != nil {
@@ -201,4 +254,44 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (m PickerModel) contentWidth() int {
+	if m.width <= 0 {
+		return 80
+	}
+	if m.width < 20 {
+		return 20
+	}
+	return m.width - 4
+}
+
+func truncateRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(value) <= limit {
+		return value
+	}
+	if limit <= 1 {
+		return "…"
+	}
+
+	runes := []rune(value)
+	return string(runes[:limit-1]) + "…"
+}
+
+func padRight(value string, width int) string {
+	length := utf8.RuneCountInString(value)
+	if length >= width {
+		return value
+	}
+	return value + strings.Repeat(" ", width-length)
 }

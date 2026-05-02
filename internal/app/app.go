@@ -22,10 +22,14 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		switch args[0] {
 		case "validate":
 			return runValidate(args[1:], stdout, stderr)
+		case "themes":
+			return runThemes(stdout)
 		case "config":
 			return runConfig(args[1:], stdout, stderr)
 		case "set-folder":
 			return runSetFolder(args[1:], stdout, stderr)
+		case "set-theme":
+			return runSetTheme(args[1:], stdout, stderr)
 		case "version", "--version", "-v":
 			_, err := fmt.Fprintf(stdout, "aoo %s\n", version)
 			return err
@@ -44,6 +48,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 
 	dir := fs.String("dir", "", "directory with YAML notes")
 	query := fs.String("query", "", "initial search query")
+	themeFlag := fs.String("theme", "", "theme name")
 	strict := fs.Bool("strict", false, "fail when any note file has validation errors")
 
 	if err := fs.Parse(args); err != nil {
@@ -69,7 +74,12 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		return fmt.Errorf("no notes found in %s", root)
 	}
 
-	selected, cancelled, err := ui.RunPicker(result.Entries, *query)
+	themeName, _, err := config.ResolveTheme(*themeFlag)
+	if err != nil {
+		return err
+	}
+
+	selected, cancelled, err := ui.RunPicker(result.Entries, *query, themeName)
 	if err != nil || cancelled || selected == nil {
 		return err
 	}
@@ -182,6 +192,8 @@ func runConfig(args []string, stdout, stderr io.Writer) error {
 		return runConfigShow(stdout)
 	case "set-folder":
 		return runSetFolder(args[1:], stdout, stderr)
+	case "set-theme":
+		return runSetTheme(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", args[0])
 	}
@@ -233,10 +245,51 @@ func runConfigShow(stdout io.Writer) error {
 		}
 	}
 
+	themeName, themeSource, themeErr := config.ResolveTheme("")
+	if themeErr != nil {
+		return themeErr
+	}
+
 	fmt.Fprintf(stdout, "config file: %s\n", configPath)
 	fmt.Fprintf(stdout, "notes_dir: %s\n", emptyIfUnset(cfg.NotesDir))
 	fmt.Fprintf(stdout, "active dir: %s\n", emptyIfUnset(root))
 	fmt.Fprintf(stdout, "active source: %s\n", source)
+	fmt.Fprintf(stdout, "theme: %s\n", emptyIfUnset(cfg.Theme))
+	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
+	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
+	return nil
+}
+
+func runSetTheme(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("set-theme", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() != 1 {
+		return errors.New("usage: aoo set-theme THEME")
+	}
+
+	themeName := fs.Arg(0)
+	if _, err := ui.ResolveTheme(themeName); err != nil {
+		return err
+	}
+
+	saved, err := config.SetTheme(themeName)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(stdout, "configured theme: %s\n", saved)
+	return err
+}
+
+func runThemes(stdout io.Writer) error {
+	fmt.Fprintln(stdout, "Themes:")
+	for _, name := range ui.ThemeNames() {
+		fmt.Fprintf(stdout, "  %s\n", name)
+	}
 	return nil
 }
 
@@ -277,20 +330,25 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  aoo                 open notes")
 	fmt.Fprintln(w, "  aoo validate        validate yaml notes")
 	fmt.Fprintln(w, "  aoo set-folder DIR  set notes folder")
+	fmt.Fprintln(w, "  aoo set-theme NAME  set theme")
+	fmt.Fprintln(w, "  aoo themes          list themes")
 	fmt.Fprintln(w, "  aoo config show     show current config")
 	fmt.Fprintln(w, "  aoo version")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  aoo")
 	fmt.Fprintln(w, "  aoo --query chash")
+	fmt.Fprintln(w, "  aoo --theme catppuccin-latte")
 	fmt.Fprintln(w, "  aoo --query nmap")
 	fmt.Fprintln(w, "  aoo set-folder ~/notes")
+	fmt.Fprintln(w, "  aoo set-theme nord")
 }
 
 func printConfigUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  aoo config show")
 	fmt.Fprintln(w, "  aoo config set-folder PATH")
+	fmt.Fprintln(w, "  aoo config set-theme THEME")
 }
 
 func emptyIfUnset(value string) string {
