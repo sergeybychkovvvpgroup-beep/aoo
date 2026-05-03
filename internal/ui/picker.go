@@ -192,8 +192,11 @@ func (m PickerModel) View() string {
 		return mainView
 	}
 
-	previewText := m.previewContent(previewWidth - 4)
 	previewHeight := maxInt(effectiveHeight, lipgloss.Height(mainView))
+	if !m.options.FullScreen && previewHeight > 12 {
+		previewHeight = 12
+	}
+	previewText := m.previewContent(previewWidth-2, previewHeight)
 	previewView := lipgloss.NewStyle().
 		Width(previewWidth-2).
 		Height(maxInt(3, previewHeight)).
@@ -439,7 +442,7 @@ func (m PickerModel) shouldShowPreviewPane(previewWidth int) bool {
 	return m.options.PreviewPane && previewWidth > 0
 }
 
-func (m PickerModel) previewContent(width int) string {
+func (m PickerModel) previewContent(width, height int) string {
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG)).Bold(true)
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
 	bodyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DetailFG))
@@ -467,7 +470,7 @@ func (m PickerModel) previewContent(width int) string {
 	if entry.HasShow() {
 		lines = append(lines, "")
 		if action := entry.FirstShowAction(); action != nil {
-			lines = append(lines, wrapText(strings.TrimSpace(action.Text), width)...)
+			lines = append(lines, excerptLines(wrapText(strings.TrimSpace(action.Text), width), 8)...)
 		}
 	}
 
@@ -493,6 +496,7 @@ func (m PickerModel) previewContent(width int) string {
 		}
 	}
 
+	lines = clipLines(lines, maxInt(3, height))
 	return bodyStyle.Render(strings.Join(lines, "\n"))
 }
 
@@ -527,6 +531,32 @@ func wrapText(value string, width int) []string {
 		lines = append(lines, string(runes))
 	}
 	return lines
+}
+
+func clipLines(lines []string, height int) []string {
+	if height <= 0 || len(lines) <= height {
+		return lines
+	}
+	if height == 1 {
+		return []string{"…"}
+	}
+
+	clipped := append([]string{}, lines[:height]...)
+	clipped[height-1] = "…"
+	return clipped
+}
+
+func excerptLines(lines []string, limit int) []string {
+	if limit <= 0 || len(lines) <= limit {
+		return lines
+	}
+	if limit == 1 {
+		return []string{"…"}
+	}
+
+	clipped := append([]string{}, lines[:limit]...)
+	clipped[limit-1] = "…"
+	return clipped
 }
 
 func truncateRunes(value string, limit int) string {
