@@ -448,7 +448,16 @@ func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
 		return errors.New("selected note has no source file")
 	}
 	if !filepath.IsAbs(entry.SourcePath) {
-		return fmt.Errorf("selected note is bundled and cannot be edited from here: %s", entry.SourcePath)
+		notesDir, _, err := config.ResolveNotesDir("")
+		if err != nil {
+			return err
+		}
+		path, err := bundled.Materialize(entry.SourcePath, notesDir)
+		if err != nil {
+			return err
+		}
+		line := bundled.FindEntryLine(path, entry.Desc)
+		return openPathInEditor(path, line, stdout, stderr)
 	}
 	return openPathInEditor(entry.SourcePath, entry.SourceLine, stdout, stderr)
 }

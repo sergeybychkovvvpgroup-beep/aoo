@@ -80,7 +80,7 @@ func ConfigPath() (string, error) {
 func DefaultFile() File {
 	return File{
 		Theme:        "auto",
-		FullScreen:   false,
+		FullScreen:   true,
 		PickerHeight: 14,
 		ShowPreview:  true,
 		PreviewPane:  false,

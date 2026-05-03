@@ -55,7 +55,7 @@ aoo config show
 Полезные UI-настройки в `config.yaml`:
 
 ```yaml
-full_screen: false
+full_screen: true
 picker_height: 14
 show_preview: true
 preview_pane: false

@@ -74,8 +74,8 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if cfg.PickerHeight != 14 {
 		t.Fatalf("expected default picker height 14, got %d", cfg.PickerHeight)
 	}
-	if cfg.FullScreen {
-		t.Fatal("expected full screen default to be false")
+	if !cfg.FullScreen {
+		t.Fatal("expected full screen default to be true")
 	}
 	if !cfg.ShowPreview {
 		t.Fatal("expected show preview default to be true")
@@ -99,7 +99,7 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "picker_height: 14") {
 		t.Fatalf("expected picker height in config, got %q", text)
 	}
-	if !strings.Contains(text, "full_screen: false") {
+	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
 	}
 	if !strings.Contains(text, "show_preview: true") {
