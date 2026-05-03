@@ -4,7 +4,7 @@
 
 Храни заметки, команды, хосты и сниппеты в YAML. Используй fuzzy search по содержимому заметок, находи нужное за секунды и запускай команды прямо из заметок.
 
-![aoo demo](docs/demo.gif)
+![aoo demo](docs/demo.png)
 
 ## Установка
 
@@ -25,6 +25,14 @@ sudo dpkg -i ./aoo_<version>_amd64.deb
 
 При первом запуске `aoo` может сам спросить URL notes repo и склонировать его в `~/.local/share/aoo/notes`.
 
+Основные настройки теперь живут в одном файле:
+
+```bash
+~/.config/aoo/config.yaml
+```
+
+Файл создаётся автоматически с комментариями и примерами.
+
 Либо можно настроить вручную:
 
 ```bash
@@ -40,7 +48,17 @@ aoo set-app-dir ~/workspace/aoo
 Проверить конфиг:
 
 ```bash
+aoo config
 aoo config show
+```
+
+Полезные UI-настройки в `config.yaml`:
+
+```yaml
+full_screen: false
+picker_height: 14
+show_preview: true
+preview_pane: false
 ```
 
 ## Использование
@@ -63,10 +81,10 @@ aoo --theme nord
 Горячие клавиши в picker:
 
 ```text
-Enter   открыть / запустить заметку
+Enter   открыть действия для заметки
 Alt+E   открыть исходный YAML в $VISUAL / $EDITOR
 Esc     выйти
-Left/Right переключить ALL / RUN / SHOW
+Left/Right переключить фильтр по тегу
 Up/Down движение по списку
 ```
 
@@ -74,39 +92,78 @@ Up/Down движение по списку
 
 ```yaml
 - desc: example ssh
-  mode: run
-  run: ssh admin@example.local
+  actions:
+    - desc: show
+      text: основной доступ к хосту
+    - desc: ssh
+      cmd: ssh admin@example.local
 
 - desc: example url
-  mode: show
-  note: |
-    https://service.example.local
+  actions:
+    - desc: show
+      text: https://service.example.local
 
 - desc: example nmap template
-  mode: run
   tags: [nmap, scan]
-  template: sudo nmap -O {{host}}
-  args:
-    - name: host
-      prompt: Host or IP
-      example: 192.168.1.1
+  actions:
+    - desc: nmap
+      template: sudo nmap -O {{host}}
+      args:
+        - name: host
+          prompt: Host or IP
+          example: 192.168.1.1
 ```
-
-Режимы:
-
-- `mode: run` запускает команду или template-команду
-- `mode: show` печатает текст
 
 Поведение:
 
-- `run` запускается после подтверждения
+- `Enter` всегда открывает список действий для заметки
+- `actions` это основной формат
+- `text` показывает текст
+- `cmd` запускается после подтверждения
 - `template` спрашивает аргументы, показывает итоговую команду и просит подтверждение
-- `note` печатает текст
+- `full_screen: true` включает alt-screen и использует всю высоту терминала
+- когда `full_screen: false`, высота picker ограничивается через `picker_height`, поэтому видно терминал до запуска `aoo`
+- `show_preview: false` делает каждый результат поиска однострочным
+- `preview_pane: true` показывает правую preview-панель как в `fzf`
+- у каждого действия должен быть свой `desc`
+
+Несколько действий в одной заметке:
+
+```yaml
+- desc: grep
+  actions:
+    - desc: show
+      text: частые варианты grep
+    - desc: grep in syslog
+      cmd: grep -i error /var/log/syslog
+    - desc: grep with context
+      cmd: grep -nC 3 error /var/log/syslog
+
+- desc: himki
+  actions:
+    - desc: show
+      text: основной доступ к площадке
+    - desc: ssh vyos
+      cmd: ssh vyos@himki
+    - desc: ssh tunnel
+      cmd: ssh -L 8443:10.10.10.1:443 vyos@himki
+      banner: https://127.0.0.1:8443
+```
 
 Встроенные переменные шаблонов:
 
 - `{{aoo_notes_dir}}`
 - `{{aoo_app_dir}}`
+- `{{aoo_config_file}}`
+
+Пример команды для конфига:
+
+```yaml
+- desc: edit aoo config
+  actions:
+    - desc: open
+      cmd: $EDITOR {{aoo_config_file}}
+```
 
 ## Темы
 
@@ -122,8 +179,6 @@ Up/Down движение по списку
 - `examples/notes/` безопасные example notes для демо и валидации
 - `cmd/`, `internal/` код утилиты
 - `internal/bundled/` встроенные help и starter notes
-- `docs/demo.gif` короткое терминальное демо
-- `docs/demo.tape` VHS-исходник для демо
 
 ## Релизы
 

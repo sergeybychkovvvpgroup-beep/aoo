@@ -68,6 +68,11 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		fmt.Fprintf(stdout, "[aoo] %s\n", message)
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
 	root, _, err := config.ResolveNotesDir(*dir)
 	if err != nil {
 		if _, ok := err.(config.SetupRequiredError); ok && strings.TrimSpace(*dir) == "" {
@@ -113,33 +118,83 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		return err
 	}
 
-	selected, cancelled, editRequested, err := ui.RunPicker(result.Entries, *query, themeName)
-	if err != nil || cancelled || selected == nil {
-		return err
+	uiOptions := ui.Options{
+		FullScreen:  cfg.FullScreen,
+		Height:      cfg.PickerHeight,
+		ShowPreview: cfg.ShowPreview,
+		PreviewPane: cfg.PreviewPane,
 	}
-	if editRequested {
-		return openEntryInEditor(*selected, stdout, stderr)
-	}
-
-	if selected.IsTemplate() {
-		return runTemplate(*selected, stdin, stdout, stderr)
+	if uiOptions.FullScreen {
+		uiOptions.Height = 0
 	}
 
-	if selected.IsRun() {
-		return runCommand(*selected, stdin, stdout, stderr)
-	}
+	currentQuery := *query
+	hasActiveUI := false
+	for {
+		if hasActiveUI && !uiOptions.FullScreen {
+			clearInteractiveArea(stdout, uiOptions.Height)
+		}
+		selected, nextQuery, cancelled, editRequested, err := ui.RunPicker(result.Entries, currentQuery, themeName, uiOptions)
+		hasActiveUI = true
+		currentQuery = nextQuery
+		if err != nil {
+			return err
+		}
+		if cancelled || selected == nil {
+			return nil
+		}
+		if editRequested {
+			return openEntryInEditor(*selected, stdout, stderr)
+		}
 
-	printNote(*selected, stdout)
-	return nil
+		if !uiOptions.FullScreen {
+			clearInteractiveArea(stdout, uiOptions.Height)
+		}
+		action, cancelled, err := ui.RunActionPicker(*selected, themeName, uiOptions)
+		if err != nil {
+			return err
+		}
+		if cancelled || action == nil {
+			continue
+		}
+
+		switch action.Kind {
+		case ui.ActionRead:
+			printActionText(*selected, action.Action, stdout)
+			return nil
+		case ui.ActionTemplate:
+			return runTemplate(*selected, action.Action, stdin, stdout, stderr)
+		case ui.ActionRun:
+			return runCommand(*selected, action.Action, stdin, stdout, stderr)
+		default:
+			return fmt.Errorf("unknown action: %s", action.Kind)
+		}
+	}
 }
 
-func runTemplate(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) error {
+func clearInteractiveArea(stdout io.Writer, height int) {
+	rows := height
+	if rows < 6 {
+		rows = 6
+	}
+	rows += 2
+	fmt.Fprintf(stdout, "\r\x1b[%dA\x1b[J", rows)
+}
+
+func runTemplate(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout, stderr io.Writer) error {
+	if action == nil || !action.IsTemplate() {
+		return errors.New("selected action is not a template action")
+	}
 	values, err := builtInTemplateValues()
 	if err != nil {
 		return err
 	}
 
-	prepared, confirmed, err := templatecmd.Prompt(entry, stdin, stdout, values)
+	title := entry.Desc
+	if strings.TrimSpace(action.Desc) != "" {
+		title = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
+	}
+	prepared, confirmed, err := templatecmd.Prompt(title, *action, stdin, stdout, values)
 	if err != nil {
 		return err
 	}
@@ -148,8 +203,8 @@ func runTemplate(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) e
 		return nil
 	}
 
-	if banner := strings.TrimSpace(entry.Banner); banner != "" {
-		fmt.Fprintln(stdout, renderBanner(entry.Desc, banner))
+	if banner := strings.TrimSpace(action.Banner); banner != "" {
+		fmt.Fprintln(stdout, renderBanner(title, banner))
 	}
 
 	cmd := exec.Command("/bin/sh", "-lc", prepared.Command)
@@ -188,8 +243,19 @@ func loadBundledNotes() notes.LoadResult {
 	return bundled.Load()
 }
 
-func runCommand(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) error {
-	confirmed, err := promptCommandRun(entry.Desc, entry.Run, stdin, stdout)
+func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout, stderr io.Writer) error {
+	if action == nil || !action.IsCmd() {
+		return errors.New("selected action is not a command action")
+	}
+	command := strings.TrimSpace(action.Cmd)
+	banner := strings.TrimSpace(action.Banner)
+	desc := entry.Desc
+
+	if strings.TrimSpace(action.Desc) != "" {
+		desc = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
+	}
+
+	confirmed, err := promptCommandRun(desc, command, stdin, stdout)
 	if err != nil {
 		return err
 	}
@@ -198,11 +264,11 @@ func runCommand(entry notes.Entry, stdin io.Reader, stdout, stderr io.Writer) er
 		return nil
 	}
 
-	if banner := strings.TrimSpace(entry.Banner); banner != "" {
-		fmt.Fprintln(stdout, renderBanner(entry.Desc, banner))
+	if banner := strings.TrimSpace(banner); banner != "" {
+		fmt.Fprintln(stdout, renderBanner(desc, banner))
 	}
 
-	cmd := exec.Command("/bin/sh", "-lc", entry.Run)
+	cmd := exec.Command("/bin/sh", "-lc", command)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -227,8 +293,7 @@ func promptCommandRun(desc, command string, stdin io.Reader, stdout io.Writer) (
 
 func runConfig(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		printConfigUsage(stdout)
-		return nil
+		return openConfigInEditor(stdout, stderr)
 	}
 
 	switch args[0] {
@@ -318,6 +383,10 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "theme: %s\n", emptyIfUnset(cfg.Theme))
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
+	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
+	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
+	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
+	fmt.Fprintf(stdout, "preview_pane: %t\n", cfg.PreviewPane)
 	return nil
 }
 
@@ -381,7 +450,18 @@ func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
 	if !filepath.IsAbs(entry.SourcePath) {
 		return fmt.Errorf("selected note is bundled and cannot be edited from here: %s", entry.SourcePath)
 	}
+	return openPathInEditor(entry.SourcePath, entry.SourceLine, stdout, stderr)
+}
 
+func openConfigInEditor(stdout, stderr io.Writer) error {
+	configPath, err := config.ConfigPath()
+	if err != nil {
+		return err
+	}
+	return openPathInEditor(configPath, 0, stdout, stderr)
+}
+
+func openPathInEditor(path string, line int, stdout, stderr io.Writer) error {
 	editor := strings.TrimSpace(os.Getenv("VISUAL"))
 	if editor == "" {
 		editor = strings.TrimSpace(os.Getenv("EDITOR"))
@@ -395,13 +475,13 @@ func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
 	}
 
 	args := []string{}
-	if entry.SourceLine > 0 {
-		args = append(args, "+"+strconv.Itoa(entry.SourceLine))
+	if line > 0 {
+		args = append(args, "+"+strconv.Itoa(line))
 	}
-	args = append(args, entry.SourcePath)
+	args = append(args, path)
 	args = append(parts[1:], args...)
 
-	fmt.Fprintf(stdout, "[edit] %s\n", entry.SourcePath)
+	fmt.Fprintf(stdout, "[edit] %s\n", path)
 	cmd := exec.Command(parts[0], args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
@@ -409,9 +489,12 @@ func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
 	return cmd.Run()
 }
 
-func printNote(entry notes.Entry, stdout io.Writer) {
+func printActionText(entry notes.Entry, action *notes.Action, stdout io.Writer) {
+	if action == nil {
+		return
+	}
 	fmt.Fprintln(stdout, entry.Desc)
-	fmt.Fprintln(stdout, strings.TrimRight(entry.Note, "\n"))
+	fmt.Fprintln(stdout, strings.TrimRight(action.Text, "\n"))
 }
 
 func renderBanner(title, message string) string {
@@ -452,6 +535,7 @@ func printUsage(w io.Writer) {
 
 func printConfigUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  aoo config")
 	fmt.Fprintln(w, "  aoo config show")
 	fmt.Fprintln(w, "  aoo config set-folder PATH")
 	fmt.Fprintln(w, "  aoo config set-app-dir PATH")
@@ -480,6 +564,11 @@ func builtInTemplateValues() (map[string]string, error) {
 	if strings.TrimSpace(appDir) != "" {
 		values["aoo_app_dir"] = appDir
 	}
+	configPath, err := config.ConfigPath()
+	if err != nil {
+		return nil, err
+	}
+	values["aoo_config_file"] = configPath
 
 	return values, nil
 }

@@ -30,15 +30,19 @@ func TestLoadDirSkipsHiddenYAML(t *testing.T) {
 	}
 }
 
-func TestLoadBytesAcceptsExplicitMode(t *testing.T) {
+func TestLoadBytesAcceptsActions(t *testing.T) {
 	result := LoadBytes("notes.yaml", []byte(`
 - desc: show interfaces
-  mode: show
-  note: |
-    show interfaces
-- desc: ssh router
-  mode: run
-  run: ssh root@router
+  actions:
+    - desc: show
+      text: |
+        show interfaces
+    - desc: ssh router
+      cmd: ssh root@router
+- desc: router note
+  actions:
+    - desc: ssh
+      cmd: ssh root@router
 `))
 
 	if len(result.Errors) != 0 {
@@ -47,11 +51,11 @@ func TestLoadBytesAcceptsExplicitMode(t *testing.T) {
 	if len(result.Entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(result.Entries))
 	}
-	if got := result.Entries[0].Type(); got != TypeShow {
-		t.Fatalf("expected first entry type %s, got %s", TypeShow, got)
+	if !result.Entries[0].HasShow() || !result.Entries[0].HasCmd() {
+		t.Fatalf("expected first entry to have both show and cmd actions")
 	}
-	if got := result.Entries[1].Type(); got != TypeRun {
-		t.Fatalf("expected second entry type %s, got %s", TypeRun, got)
+	if !result.Entries[1].HasCmd() {
+		t.Fatalf("expected second entry to have cmd action")
 	}
 }
 
@@ -70,17 +74,46 @@ func TestLoadBytesRejectsInvalidMode(t *testing.T) {
 	}
 }
 
-func TestLoadBytesRejectsShowModeWithoutNote(t *testing.T) {
+func TestLoadBytesSupportsLegacyFields(t *testing.T) {
 	result := LoadBytes("notes.yaml", []byte(`
-- desc: invalid show
-  mode: show
+- desc: mixed show
+  note: hello
   run: echo hi
 `))
 
-	if len(result.Errors) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(result.Errors))
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no errors, got %v", result.Errors)
 	}
-	if !strings.Contains(result.Errors[0].Error(), "must have note") {
-		t.Fatalf("expected mode show validation error, got %v", result.Errors[0])
+	if !result.Entries[0].HasShow() || !result.Entries[0].HasCmd() {
+		t.Fatalf("expected legacy fields to normalize into actions")
+	}
+}
+
+func TestLoadBytesAcceptsMultipleCommandActions(t *testing.T) {
+	result := LoadBytes("notes.yaml", []byte(`
+- desc: himki
+  actions:
+    - desc: ssh vyos
+      cmd: ssh vyos@himki
+    - desc: ssh tunnel
+      cmd: ssh -L 8443:10.0.0.1:443 vyos@himki
+      banner: https://127.0.0.1:8443
+`))
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no errors, got %v", result.Errors)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	entry := result.Entries[0]
+	if got := entry.RunCount(); got != 2 {
+		t.Fatalf("expected 2 cmd actions, got %d", got)
+	}
+	if got := entry.RunOptions()[1].Desc; got != "ssh tunnel" {
+		t.Fatalf("unexpected second command desc: %q", got)
+	}
+	if got := entry.PrimaryRun(); got != "ssh vyos@himki" {
+		t.Fatalf("unexpected primary command: %q", got)
 	}
 }

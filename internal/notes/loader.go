@@ -154,6 +154,7 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 			}
 		}
 
+		entry = normalizeLegacyEntry(entry)
 		if err := validateEntry(path, node.Line, entry); err != nil {
 			return nil, err
 		}
@@ -184,28 +185,140 @@ func validateEntry(path string, line int, entry Entry) error {
 		}
 	}
 
-	if strings.TrimSpace(entry.Run) == "" && strings.TrimSpace(entry.Note) == "" && strings.TrimSpace(entry.Template) == "" {
+	if len(entry.Actions) == 0 {
 		return ValidationError{
 			Path:    path,
-			Problem: fmt.Sprintf("note %q at line %d must have run, template or note", entry.Desc, line),
+			Problem: fmt.Sprintf("note %q at line %d must have at least one action", entry.Desc, line),
 		}
 	}
 
-	if mode == "run" && strings.TrimSpace(entry.Run) == "" && strings.TrimSpace(entry.Template) == "" {
-		return ValidationError{
-			Path:    path,
-			Problem: fmt.Sprintf("note %q at line %d with mode run must have run or template", entry.Desc, line),
+	for i, action := range entry.Actions {
+		actionLine := line
+		if strings.TrimSpace(action.Desc) == "" {
+			return ValidationError{
+				Path:    path,
+				Problem: fmt.Sprintf("note %q action %d at line %d is missing required field desc", entry.Desc, i+1, actionLine),
+			}
 		}
-	}
 
-	if mode == "show" && strings.TrimSpace(entry.Note) == "" {
-		return ValidationError{
-			Path:    path,
-			Problem: fmt.Sprintf("note %q at line %d with mode show must have note", entry.Desc, line),
+		kinds := 0
+		if action.IsShow() {
+			kinds++
+		}
+		if action.IsCmd() {
+			kinds++
+		}
+		if action.IsTemplate() {
+			kinds++
+		}
+		if kinds == 0 {
+			return ValidationError{
+				Path:    path,
+				Problem: fmt.Sprintf("note %q action %q at line %d must have text, cmd, or template", entry.Desc, action.Desc, actionLine),
+			}
+		}
+		if kinds > 1 {
+			return ValidationError{
+				Path:    path,
+				Problem: fmt.Sprintf("note %q action %q at line %d must use only one of text, cmd, or template", entry.Desc, action.Desc, actionLine),
+			}
 		}
 	}
 
 	return nil
+}
+
+func normalizeLegacyEntry(entry Entry) Entry {
+	if len(entry.Actions) > 0 {
+		for i := range entry.Actions {
+			entry.Actions[i].Desc = strings.TrimSpace(entry.Actions[i].Desc)
+			entry.Actions[i].Cmd = strings.TrimSpace(entry.Actions[i].Cmd)
+			entry.Actions[i].Text = strings.TrimSpace(entry.Actions[i].Text)
+			entry.Actions[i].Template = strings.TrimSpace(entry.Actions[i].Template)
+			entry.Actions[i].Banner = strings.TrimSpace(entry.Actions[i].Banner)
+		}
+		return entry
+	}
+
+	actions := make([]Action, 0, 1+len(entry.Run))
+	if text := strings.TrimSpace(entry.Note); text != "" {
+		actions = append(actions, Action{
+			Desc: "show",
+			Text: text,
+		})
+	}
+	for i, option := range entry.Run {
+		desc := strings.TrimSpace(option.Desc)
+		if desc == "" {
+			desc = inferActionDesc(option.Run, fmt.Sprintf("run %d", i+1))
+		}
+		banner := strings.TrimSpace(option.Banner)
+		if banner == "" && i == 0 {
+			banner = strings.TrimSpace(entry.Banner)
+		}
+		actions = append(actions, Action{
+			Desc:   desc,
+			Cmd:    strings.TrimSpace(option.Run),
+			Banner: banner,
+		})
+	}
+	if template := strings.TrimSpace(entry.Template); template != "" {
+		actions = append(actions, Action{
+			Desc:     inferActionDesc(template, "run"),
+			Template: template,
+			Args:     entry.Args,
+			Banner:   strings.TrimSpace(entry.Banner),
+		})
+	}
+	entry.Actions = actions
+	return entry
+}
+
+func inferActionDesc(command string, fallback string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return fallback
+	}
+
+	if parts := strings.Split(command, "&&"); len(parts) > 1 {
+		command = strings.TrimSpace(parts[len(parts)-1])
+	}
+	command = strings.TrimSpace(strings.TrimSuffix(command, ";"))
+
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return fallback
+	}
+
+	first := fields[0]
+	if first == "sudo" && len(fields) > 1 {
+		first = fields[1]
+		fields = fields[1:]
+	}
+	switch first {
+	case "ssh":
+		for i := 1; i < len(fields); i++ {
+			if fields[i] == "-L" {
+				if i+1 < len(fields) {
+					if port := strings.SplitN(fields[i+1], ":", 2)[0]; port != "" {
+						return "tunnel " + port
+					}
+				}
+				return "tunnel"
+			}
+			if strings.HasPrefix(fields[i], "-L") && len(fields[i]) > 2 {
+				if port := strings.SplitN(strings.TrimPrefix(fields[i], "-L"), ":", 2)[0]; port != "" {
+					return "tunnel " + port
+				}
+				return "tunnel"
+			}
+		}
+		return "ssh"
+	case "grep", "find", "dig", "curl", "make", "git", "docker", "mount", "nmap", "echo", "aoo":
+		return first
+	default:
+		return fallback
+	}
 }
 
 func isYAMLFile(path string) bool {

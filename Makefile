@@ -1,13 +1,14 @@
 APP := aoo
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
+GOFLAGS ?= -buildvcs=false
 
 .PHONY: build install update test validate tidy snapshot
 
 build:
 	@echo "[build] compiling $(APP)"
 	@mkdir -p bin
-	@go build -o bin/$(APP) ./cmd/aoo
+	@go build $(GOFLAGS) -o bin/$(APP) ./cmd/aoo
 	@echo "[build] done: bin/$(APP)"
 
 install: build

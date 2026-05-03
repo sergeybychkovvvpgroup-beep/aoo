@@ -17,15 +17,15 @@ type Prepared struct {
 	Values  map[string]string
 }
 
-func Prompt(entry notes.Entry, stdin io.Reader, stdout io.Writer, baseValues map[string]string) (Prepared, bool, error) {
+func Prompt(title string, action notes.Action, stdin io.Reader, stdout io.Writer, baseValues map[string]string) (Prepared, bool, error) {
 	reader := bufio.NewReader(stdin)
-	values := make(map[string]string, len(entry.Args)+len(baseValues))
+	values := make(map[string]string, len(action.Args)+len(baseValues))
 	for key, value := range baseValues {
 		values[key] = value
 	}
 
-	fmt.Fprintf(stdout, "[template] %s\n", entry.Desc)
-	for _, arg := range entry.Args {
+	fmt.Fprintf(stdout, "[template] %s\n", title)
+	for _, arg := range action.Args {
 		label := arg.Prompt
 		if strings.TrimSpace(label) == "" {
 			label = arg.Name
@@ -60,7 +60,7 @@ func Prompt(entry notes.Entry, stdin io.Reader, stdout io.Writer, baseValues map
 		}
 	}
 
-	command, err := Render(entry.Template, values)
+	command, err := Render(action.Template, values)
 	if err != nil {
 		return Prepared{}, false, err
 	}

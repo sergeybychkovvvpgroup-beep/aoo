@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -59,5 +60,52 @@ func TestResolveNotesDirReturnsSetupErrorWithoutSources(t *testing.T) {
 
 	if _, ok := err.(SetupRequiredError); !ok {
 		t.Fatalf("expected SetupRequiredError, got %T", err)
+	}
+}
+
+func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PickerHeight != 14 {
+		t.Fatalf("expected default picker height 14, got %d", cfg.PickerHeight)
+	}
+	if cfg.FullScreen {
+		t.Fatal("expected full screen default to be false")
+	}
+	if !cfg.ShowPreview {
+		t.Fatal("expected show preview default to be true")
+	}
+	if cfg.PreviewPane {
+		t.Fatal("expected preview pane default to be false")
+	}
+
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "# aoo config") {
+		t.Fatalf("expected commented config template, got %q", text)
+	}
+	if !strings.Contains(text, "picker_height: 14") {
+		t.Fatalf("expected picker height in config, got %q", text)
+	}
+	if !strings.Contains(text, "full_screen: false") {
+		t.Fatalf("expected full screen in config, got %q", text)
+	}
+	if !strings.Contains(text, "show_preview: true") {
+		t.Fatalf("expected show preview in config, got %q", text)
+	}
+	if !strings.Contains(text, "preview_pane: false") {
+		t.Fatalf("expected preview pane in config, got %q", text)
 	}
 }

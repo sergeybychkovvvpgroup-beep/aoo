@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -22,6 +23,22 @@ type File struct {
 	NotesRepo     string `yaml:"notes_repo"`
 	AppDir        string `yaml:"app_dir"`
 	Theme         string `yaml:"theme"`
+	FullScreen    bool   `yaml:"full_screen"`
+	PickerHeight  int    `yaml:"picker_height"`
+	ShowPreview   bool   `yaml:"show_preview"`
+	PreviewPane   bool   `yaml:"preview_pane"`
+	LastRepoCheck string `yaml:"last_repo_check"`
+}
+
+type rawFile struct {
+	NotesDir      string `yaml:"notes_dir"`
+	NotesRepo     string `yaml:"notes_repo"`
+	AppDir        string `yaml:"app_dir"`
+	Theme         string `yaml:"theme"`
+	FullScreen    *bool  `yaml:"full_screen"`
+	PickerHeight  *int   `yaml:"picker_height"`
+	ShowPreview   *bool  `yaml:"show_preview"`
+	PreviewPane   *bool  `yaml:"preview_pane"`
 	LastRepoCheck string `yaml:"last_repo_check"`
 }
 
@@ -32,6 +49,10 @@ func (e SetupRequiredError) Error() string {
 notes directory is not configured
 
 Initial setup:
+  edit ~/.config/aoo/config.yaml
+  and set notes_dir
+
+Or use commands:
   aoo set-folder /path/to/notes
 
 Temporary override:
@@ -56,6 +77,16 @@ func ConfigPath() (string, error) {
 	return filepath.Join(dir, "aoo", "config.yaml"), nil
 }
 
+func DefaultFile() File {
+	return File{
+		Theme:        "auto",
+		FullScreen:   false,
+		PickerHeight: 14,
+		ShowPreview:  true,
+		PreviewPane:  false,
+	}
+}
+
 func Load() (File, error) {
 	path, err := ConfigPath()
 	if err != nil {
@@ -65,21 +96,43 @@ func Load() (File, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return File{}, nil
+			cfg := DefaultFile()
+			if saveErr := Save(cfg); saveErr != nil {
+				return File{}, saveErr
+			}
+			return cfg, nil
 		}
 		return File{}, fmt.Errorf("read config %s: %w", path, err)
 	}
 
-	var cfg File
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+	cfg := DefaultFile()
+	var parsed rawFile
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
 		return File{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 
-	cfg.NotesDir = strings.TrimSpace(cfg.NotesDir)
-	cfg.NotesRepo = strings.TrimSpace(cfg.NotesRepo)
-	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
-	cfg.Theme = strings.TrimSpace(cfg.Theme)
-	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
+	cfg.NotesDir = strings.TrimSpace(parsed.NotesDir)
+	cfg.NotesRepo = strings.TrimSpace(parsed.NotesRepo)
+	cfg.AppDir = strings.TrimSpace(parsed.AppDir)
+	if value := strings.TrimSpace(parsed.Theme); value != "" {
+		cfg.Theme = value
+	}
+	if parsed.FullScreen != nil {
+		cfg.FullScreen = *parsed.FullScreen
+	}
+	if parsed.PickerHeight != nil {
+		cfg.PickerHeight = *parsed.PickerHeight
+	}
+	if parsed.ShowPreview != nil {
+		cfg.ShowPreview = *parsed.ShowPreview
+	}
+	if parsed.PreviewPane != nil {
+		cfg.PreviewPane = *parsed.PreviewPane
+	}
+	cfg.LastRepoCheck = strings.TrimSpace(parsed.LastRepoCheck)
+	if cfg.PickerHeight < 6 {
+		cfg.PickerHeight = 6
+	}
 	return cfg, nil
 }
 
@@ -93,12 +146,7 @@ func Save(cfg File) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	data, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return fmt.Errorf("encode config: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(renderConfig(cfg)), 0o644); err != nil {
 		return fmt.Errorf("write config %s: %w", path, err)
 	}
 
@@ -294,4 +342,98 @@ func hasVisibleYAML(matches []string) bool {
 		return true
 	}
 	return false
+}
+
+func renderConfig(cfg File) string {
+	cfg.NotesDir = strings.TrimSpace(cfg.NotesDir)
+	cfg.NotesRepo = strings.TrimSpace(cfg.NotesRepo)
+	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
+	cfg.Theme = strings.TrimSpace(cfg.Theme)
+	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
+	if cfg.Theme == "" {
+		cfg.Theme = DefaultFile().Theme
+	}
+	if cfg.PickerHeight < 6 {
+		cfg.PickerHeight = DefaultFile().PickerHeight
+	}
+
+	lines := []string{
+		"# aoo config",
+		"#",
+		"# All user settings live here.",
+		"# Edit this file directly instead of keeping setup/help values in notes.",
+		"#",
+		"# Notes directory with your YAML files.",
+		"# Example: /root/.local/share/aoo/notes",
+		"notes_dir: " + yamlScalar(cfg.NotesDir),
+		"",
+		"# Optional git repo URL for the notes source.",
+		"# Used by `aoo set-source` and repo status hints.",
+		"notes_repo: " + yamlScalar(cfg.NotesRepo),
+		"",
+		"# Optional path to the aoo app checkout.",
+		"# Built-in templates can use {{aoo_app_dir}}.",
+		"app_dir: " + yamlScalar(cfg.AppDir),
+		"",
+		"# UI theme. Use `aoo themes` to list available values.",
+		"# Recommended: auto, nord, catppuccin-mocha, solarized-dark.",
+		"theme: " + yamlScalar(cfg.Theme),
+		"",
+		"# Enable full-screen TUI mode.",
+		"# true  = use the terminal alternate screen and full terminal height",
+		"# false = keep the compact inline picker mode",
+		"full_screen: " + yamlScalarBool(cfg.FullScreen),
+		"",
+		"# Picker height in terminal rows.",
+		"# Used only when full_screen is false.",
+		"# Keep this small to see prior terminal output.",
+		"# Minimum value is 6. Recommended range: 10-18.",
+		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
+		"",
+		"# Show second-line preview in the search results.",
+		"# true  = title + preview line",
+		"# false = one result per line",
+		"show_preview: " + yamlScalarBool(cfg.ShowPreview),
+		"",
+		"# Show a side preview pane like fzf.",
+		"# The pane renders the selected note/command details on the right side.",
+		"preview_pane: " + yamlScalarBool(cfg.PreviewPane),
+		"",
+		"# Internal timestamp for repo update checks.",
+		"# Safe to leave empty.",
+		"last_repo_check: " + yamlScalar(cfg.LastRepoCheck),
+		"",
+		"# Quick reference:",
+		"# - start: aoo",
+		"# - validate notes: aoo validate --dir /path/to/notes",
+		"# - edit config: aoo config",
+		"# - inspect current config: aoo config show",
+		"#",
+		"# Environment overrides:",
+		"# - AOO_CONFIG_FILE",
+		"# - AOO_NOTES_DIR",
+		"# - AOO_APP_DIR",
+		"# - AOO_THEME",
+		"",
+	}
+	return strings.Join(lines, "\n")
+}
+
+func yamlScalar(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return `""`
+	}
+	raw, err := yaml.Marshal(trimmed)
+	if err != nil {
+		return `""`
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func yamlScalarBool(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }

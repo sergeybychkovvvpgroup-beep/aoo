@@ -29,17 +29,17 @@ func TestFilterDoesNotReturnLooseSubsequenceNoise(t *testing.T) {
 	entries := []Entry{
 		{
 			Desc:       "nmap os detect host",
-			Template:   "sudo nmap -O {{host}}",
+			Actions:    []Action{{Desc: "run", Template: "sudo nmap -O {{host}}"}},
 			SourceFile: "command_templates.yaml",
 		},
 		{
 			Desc:       "mount cifs share",
-			Template:   "sudo mount -t cifs -o username={{username}} //{{server}}/{{share}} {{mountpoint}}",
+			Actions:    []Action{{Desc: "run", Template: "sudo mount -t cifs -o username={{username}} //{{server}}/{{share}} {{mountpoint}}"}},
 			SourceFile: "command_templates.yaml",
 		},
 		{
 			Desc:       "ssh to host",
-			Template:   "ssh {{user}}@{{host}}",
+			Actions:    []Action{{Desc: "run", Template: "ssh {{user}}@{{host}}"}},
 			SourceFile: "command_templates.yaml",
 		},
 	}
@@ -58,17 +58,17 @@ func TestFilterMatchesNumericTokensWithLeadingZeros(t *testing.T) {
 	entries := []Entry{
 		{
 			Desc:       "ssh pve-beria-03",
-			Run:        "ssh root@10.111.0.3",
+			Actions:    []Action{{Desc: "ssh", Cmd: "ssh root@10.111.0.3"}},
 			SourceFile: "netrack.yaml",
 		},
 		{
 			Desc:       "IPMI netrack-pve-beria-03",
-			Note:       "https://10.111.200.9",
+			Actions:    []Action{{Desc: "show", Text: "https://10.111.200.9"}},
 			SourceFile: "netrack.yaml",
 		},
 		{
 			Desc:       "ssh pve-beria-16-external-beeline",
-			Run:        "ssh root@10.115.0.16",
+			Actions:    []Action{{Desc: "ssh", Cmd: "ssh root@10.115.0.16"}},
 			SourceFile: "beria-himki.yaml",
 		},
 	}
@@ -86,13 +86,13 @@ func TestFilterMatchesNumericTokensWithLeadingZeros(t *testing.T) {
 	}
 }
 
-func TestEntryTypeTreatsTemplateAsRun(t *testing.T) {
+func TestEntryActionSummarizesTemplate(t *testing.T) {
 	entry := Entry{
-		Desc:     "ssh to host",
-		Template: "ssh {{user}}@{{host}}",
+		Desc:    "ssh to host",
+		Actions: []Action{{Desc: "run", Template: "ssh {{user}}@{{host}}"}},
 	}
 
-	if got := entry.Type(); got != TypeRun {
-		t.Fatalf("expected template entry type %s, got %s", TypeRun, got)
+	if got := entry.Action(); got != "TEMPLATE" {
+		t.Fatalf("expected template action summary, got %s", got)
 	}
 }

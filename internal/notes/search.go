@@ -22,11 +22,10 @@ func Filter(entries []Entry, query string) []Match {
 			matches = append(matches, Match{
 				Entry:  entry,
 				Score:  1,
-				Label:  entry.Title(),
 				Detail: formatDetail(entry),
 			})
 		}
-		return matches
+		return applyMatchLabels(matches)
 	}
 
 	terms := strings.Fields(query)
@@ -41,7 +40,6 @@ func Filter(entries []Entry, query string) []Match {
 		matches = append(matches, Match{
 			Entry:  entry,
 			Score:  score,
-			Label:  entry.Title(),
 			Detail: formatDetail(entry),
 		})
 	}
@@ -52,6 +50,26 @@ func Filter(entries []Entry, query string) []Match {
 		}
 		return matches[i].Score > matches[j].Score
 	})
+
+	return applyMatchLabels(matches)
+}
+
+func applyMatchLabels(matches []Match) []Match {
+	if len(matches) == 0 {
+		return matches
+	}
+
+	counts := make(map[string]int, len(matches))
+	for _, match := range matches {
+		counts[normalize(match.Entry.Desc)]++
+	}
+
+	for i := range matches {
+		matches[i].Label = matches[i].Entry.Desc
+		if counts[normalize(matches[i].Entry.Desc)] > 1 {
+			matches[i].Label = matches[i].Entry.Title()
+		}
+	}
 
 	return matches
 }
@@ -75,7 +93,7 @@ func scoreEntry(entry Entry, terms []string) (int, bool) {
 		total += best
 	}
 
-	if entry.IsRun() {
+	if entry.HasCmd() {
 		total += 4
 	}
 
@@ -92,9 +110,15 @@ func weightedFields(entry Entry) []weightedField {
 		{value: normalize(entry.Desc), weight: 8},
 		{value: normalize(strings.TrimSuffix(entry.SourceFile, filepathExt(entry.SourceFile))), weight: 7},
 		{value: normalize(strings.Join(entry.Tags, " ")), weight: 7},
-		{value: normalize(entry.Run), weight: 5},
-		{value: normalize(entry.Note), weight: 3},
-		{value: normalize(entry.Banner), weight: 2},
+	}
+	for _, action := range entry.Actions {
+		fields = append(fields,
+			weightedField{value: normalize(action.Desc), weight: 6},
+			weightedField{value: normalize(action.Cmd), weight: 5},
+			weightedField{value: normalize(action.Text), weight: 3},
+			weightedField{value: normalize(action.Template), weight: 5},
+			weightedField{value: normalize(action.Banner), weight: 2},
+		)
 	}
 
 	out := make([]weightedField, 0, len(fields))

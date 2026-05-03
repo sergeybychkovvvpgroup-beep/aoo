@@ -1,71 +1,77 @@
 - desc: aoo-help
-  mode: show
-  note: |
-    aoo = terminal notes + command launcher.
+  actions:
+  - desc: show
+    text: |-
+      aoo = terminal notes + command launcher.
 
-    Start:
-      aoo
-      aoo --query ssh
+      Start:
+        aoo
+        aoo --query ssh
 
-    Setup notes source:
-      aoo set-source
-      aoo set-folder ~/.local/share/aoo/notes
-      aoo set-app-dir ~/workspace/aoo
+      Settings:
+        run: aoo config
+        inspect: aoo config show
 
-    Theme:
-      aoo themes
-      aoo set-theme nord
-      aoo --theme nord
+      Validate notes:
+        aoo validate --dir ~/.local/share/aoo/notes
 
-    Check config:
-      aoo config show
-
-    Validate notes:
-      aoo validate --dir ~/.local/share/aoo/notes
-
-    Useful searches:
-      ssh
-      vyos
-      git
-      theme
-      aoo
-
+      Useful searches:
+        ssh
+        vyos
+        git
+        theme
+        aoo
 - desc: aoo set source
-  mode: run
-  run: aoo set-source
-  tags: [aoo, setup, source]
-
+  tags:
+  - aoo
+  actions:
+  - desc: set source
+    cmd: aoo set-source
+- desc: aoo config edit
+  tags:
+  - aoo
+  actions:
+  - desc: open config
+    cmd: aoo config
 - desc: aoo config show
-  mode: run
-  run: aoo config show
-  tags: [aoo, config]
-
+  tags:
+  - aoo
+  actions:
+  - desc: show config
+    cmd: aoo config show
 - desc: aoo list themes
-  mode: run
-  run: aoo themes
-  tags: [aoo, theme]
-
+  tags:
+  - aoo
+  actions:
+  - desc: list themes
+    cmd: aoo themes
 - desc: aoo version
-  mode: run
-  run: aoo version
-  tags: [aoo, version]
-
+  tags:
+  - aoo
+  actions:
+  - desc: version
+    cmd: aoo version
 - desc: aoo make build
-  mode: run
-  run: make build
-  tags: [aoo, make, build]
-
+  tags:
+  - aoo
+  actions:
+  - desc: make
+    cmd: make build
 - desc: aoo make update
-  mode: run
-  run: sudo make update
-  tags: [aoo, make, install, update]
-
+  tags:
+  - aoo
+  actions:
+  - desc: make
+    cmd: sudo make update
 - desc: aoo make test
-  mode: run
-  run: make test
-  tags: [aoo, make, test]
-
+  tags:
+  - aoo
+  actions:
+  - desc: make
+    cmd: make test
 - desc: aoo make validate
-  mode: run
-  run: make validate
-  tags: [aoo, make, validate]
+  tags:
+  - aoo
+  actions:
+  - desc: make
+    cmd: make validate
