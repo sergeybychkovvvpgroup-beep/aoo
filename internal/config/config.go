@@ -82,7 +82,7 @@ func DefaultFile() File {
 		Theme:        "auto",
 		FullScreen:   true,
 		PickerHeight: 14,
-		ShowPreview:  true,
+		ShowPreview:  false,
 		PreviewPane:  false,
 	}
 }

@@ -57,7 +57,7 @@ Useful UI settings in `config.yaml`:
 ```yaml
 full_screen: true
 picker_height: 14
-show_preview: true
+show_preview: false
 preview_pane: false
 ```
 

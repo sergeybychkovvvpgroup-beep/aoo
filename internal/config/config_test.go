@@ -77,8 +77,8 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !cfg.FullScreen {
 		t.Fatal("expected full screen default to be true")
 	}
-	if !cfg.ShowPreview {
-		t.Fatal("expected show preview default to be true")
+	if cfg.ShowPreview {
+		t.Fatal("expected show preview default to be false")
 	}
 	if cfg.PreviewPane {
 		t.Fatal("expected preview pane default to be false")
@@ -102,7 +102,7 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
 	}
-	if !strings.Contains(text, "show_preview: true") {
+	if !strings.Contains(text, "show_preview: false") {
 		t.Fatalf("expected show preview in config, got %q", text)
 	}
 	if !strings.Contains(text, "preview_pane: false") {
