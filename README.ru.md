@@ -81,74 +81,54 @@ aoo --theme nord
 Горячие клавиши в picker:
 
 ```text
-Enter   открыть действия для заметки
-Alt+E   открыть исходный YAML в $VISUAL / $EDITOR
+Enter   открыть или выполнить
+Ctrl+E  редактировать YAML
+Ctrl+N  создать новую заметку из текущего запроса
 Esc     выйти
-Left/Right переключить фильтр по тегу
-Up/Down движение по списку
 ```
+
+Быстрое добавление:
+
+```bash
+aoo add "router dhcp"
+aoo add cmd "restart nginx"
+```
+
+Обе команды создают YAML-скелет, открывают его в `$VISUAL` / `$EDITOR`, а после выхода из редактора автоматически делают commit и push, если `notes_dir` это git repo.
 
 ## Формат заметок
 
 ```yaml
 - desc: example ssh
-  actions:
-    - desc: show
-      text: основной доступ к хосту
-    - desc: ssh
-      cmd: ssh admin@example.local
+  text: основной доступ к хосту
+  cmd: ssh admin@example.local
 
 - desc: example url
-  actions:
-    - desc: show
-      text: https://service.example.local
+  text: https://service.example.local
 
 - desc: example nmap template
   tags: [nmap, scan]
-  actions:
-    - desc: nmap
-      template: sudo nmap -O {{host}}
-      args:
-        - name: host
-          prompt: Host or IP
-          example: 192.168.1.1
+  template: sudo nmap -O {{host}}
+  args:
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.1
 ```
 
 Поведение:
 
-- `Enter` всегда открывает список действий для заметки
-- `actions` это основной формат
+- `Enter` сразу делает главное действие
+- если у записи есть `cmd`, то `Enter` запускает его
+- если у записи только `text`, то `Enter` показывает заметку
+- старый формат `actions` остаётся только для совместимости
 - `text` показывает текст
-- `cmd` запускается после подтверждения
-- `template` спрашивает аргументы, показывает итоговую команду и просит подтверждение
+- `cmd` запускается сразу после выбора
+- `template` спрашивает аргументы, показывает итоговую команду и сразу запускает её
 - `full_screen: true` включает alt-screen и использует всю высоту терминала
 - когда `full_screen: false`, высота picker ограничивается через `picker_height`, поэтому видно терминал до запуска `aoo`
 - `show_preview: false` делает каждый результат поиска однострочным
 - `preview_pane: true` показывает правую preview-панель как в `fzf`
-- у каждого действия должен быть свой `desc`
-
-Несколько действий в одной заметке:
-
-```yaml
-- desc: grep
-  actions:
-    - desc: show
-      text: частые варианты grep
-    - desc: grep in syslog
-      cmd: grep -i error /var/log/syslog
-    - desc: grep with context
-      cmd: grep -nC 3 error /var/log/syslog
-
-- desc: himki
-  actions:
-    - desc: show
-      text: основной доступ к площадке
-    - desc: ssh vyos
-      cmd: ssh vyos@himki
-    - desc: ssh tunnel
-      cmd: ssh -L 8443:10.10.10.1:443 vyos@himki
-      banner: https://127.0.0.1:8443
-```
+- старайся держать одну запись = одна основная задача
 
 Встроенные переменные шаблонов:
 
@@ -160,9 +140,7 @@ Up/Down движение по списку
 
 ```yaml
 - desc: edit aoo config
-  actions:
-    - desc: open
-      cmd: $EDITOR {{aoo_config_file}}
+  cmd: $EDITOR {{aoo_config_file}}
 ```
 
 ## Темы

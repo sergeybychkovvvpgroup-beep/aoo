@@ -25,6 +25,7 @@ type File struct {
 	Theme         string `yaml:"theme"`
 	FullScreen    bool   `yaml:"full_screen"`
 	PickerHeight  int    `yaml:"picker_height"`
+	PreviewWidth  int    `yaml:"preview_width"`
 	ShowPreview   bool   `yaml:"show_preview"`
 	PreviewPane   bool   `yaml:"preview_pane"`
 	LastRepoCheck string `yaml:"last_repo_check"`
@@ -37,6 +38,7 @@ type rawFile struct {
 	Theme         string `yaml:"theme"`
 	FullScreen    *bool  `yaml:"full_screen"`
 	PickerHeight  *int   `yaml:"picker_height"`
+	PreviewWidth  *int   `yaml:"preview_width"`
 	ShowPreview   *bool  `yaml:"show_preview"`
 	PreviewPane   *bool  `yaml:"preview_pane"`
 	LastRepoCheck string `yaml:"last_repo_check"`
@@ -82,6 +84,7 @@ func DefaultFile() File {
 		Theme:        "auto",
 		FullScreen:   true,
 		PickerHeight: 14,
+		PreviewWidth: 52,
 		ShowPreview:  false,
 		PreviewPane:  false,
 	}
@@ -123,6 +126,9 @@ func Load() (File, error) {
 	if parsed.PickerHeight != nil {
 		cfg.PickerHeight = *parsed.PickerHeight
 	}
+	if parsed.PreviewWidth != nil {
+		cfg.PreviewWidth = *parsed.PreviewWidth
+	}
 	if parsed.ShowPreview != nil {
 		cfg.ShowPreview = *parsed.ShowPreview
 	}
@@ -132,6 +138,9 @@ func Load() (File, error) {
 	cfg.LastRepoCheck = strings.TrimSpace(parsed.LastRepoCheck)
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = 6
+	}
+	if cfg.PreviewWidth < 32 {
+		cfg.PreviewWidth = DefaultFile().PreviewWidth
 	}
 	return cfg, nil
 }
@@ -356,6 +365,9 @@ func renderConfig(cfg File) string {
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = DefaultFile().PickerHeight
 	}
+	if cfg.PreviewWidth < 32 {
+		cfg.PreviewWidth = DefaultFile().PreviewWidth
+	}
 
 	lines := []string{
 		"# aoo config",
@@ -389,6 +401,11 @@ func renderConfig(cfg File) string {
 		"# Keep this small to see prior terminal output.",
 		"# Minimum value is 6. Recommended range: 10-18.",
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
+		"",
+		"# Preview pane width in terminal columns.",
+		"# Used when preview_pane is true.",
+		"# Minimum value is 32. Recommended range: 40-80.",
+		"preview_width: " + strconv.Itoa(cfg.PreviewWidth),
 		"",
 		"# Show second-line preview in the search results.",
 		"# true  = title + preview line",

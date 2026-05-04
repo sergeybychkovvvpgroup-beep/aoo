@@ -15,8 +15,8 @@ type Match struct {
 }
 
 func Filter(entries []Entry, query string) []Match {
-	query = normalize(query)
-	if query == "" {
+	terms := queryTerms(query)
+	if len(terms) == 0 {
 		matches := make([]Match, 0, len(entries))
 		for _, entry := range entries {
 			matches = append(matches, Match{
@@ -27,8 +27,6 @@ func Filter(entries []Entry, query string) []Match {
 		}
 		return applyMatchLabels(matches)
 	}
-
-	terms := strings.Fields(query)
 	matches := make([]Match, 0, len(entries))
 
 	for _, entry := range entries {
@@ -54,6 +52,19 @@ func Filter(entries []Entry, query string) []Match {
 	return applyMatchLabels(matches)
 }
 
+func queryTerms(query string) []string {
+	rawTerms := strings.Fields(strings.TrimSpace(query))
+	terms := make([]string, 0, len(rawTerms))
+	for _, raw := range rawTerms {
+		normalized := normalize(raw)
+		if normalized == "" {
+			continue
+		}
+		terms = append(terms, normalized)
+	}
+	return terms
+}
+
 func applyMatchLabels(matches []Match) []Match {
 	if len(matches) == 0 {
 		return matches
@@ -75,7 +86,10 @@ func applyMatchLabels(matches []Match) []Match {
 }
 
 func scoreEntry(entry Entry, terms []string) (int, bool) {
-	fields := weightedFields(entry)
+	fields := entry.searchData
+	if len(fields) == 0 {
+		fields = weightedFields(entry)
+	}
 	total := 0
 
 	for _, term := range terms {
@@ -140,6 +154,10 @@ func matchScore(field weightedField, term string) int {
 	}
 
 	normalizedTerm := normalizeNumericToken(term)
+	normalizedField := normalizeNumericToken(field.value)
+	if strings.Contains(normalizedField, normalizedTerm) {
+		return 119 + field.weight*10
+	}
 
 	bestWord := 0
 	for _, word := range strings.Fields(field.value) {

@@ -137,13 +137,13 @@ func PrintHint(status Status, stdout io.Writer) {
 
 	switch {
 	case status.Dirty:
-		fmt.Fprintf(stdout, "[notes] %d local change(s). search: notes git add commit push\n", status.DirtyFiles)
+		fmt.Fprintf(stdout, "[notes] %d local change(s) pending\n", status.DirtyFiles)
 	case status.Ahead > 0 && status.Behind > 0:
 		fmt.Fprintf(stdout, "[notes] diverged: %d ahead / %d behind\n", status.Ahead, status.Behind)
 	case status.Ahead > 0:
-		fmt.Fprintf(stdout, "[notes] %d local commit(s) to push\n", status.Ahead)
+		fmt.Fprintf(stdout, "[notes] %d local commit(s) pending push\n", status.Ahead)
 	case status.Behind > 0:
-		fmt.Fprintf(stdout, "[notes] %d fetched commit(s) available. search: notes git pull\n", status.Behind)
+		fmt.Fprintf(stdout, "[notes] %d fetched commit(s) available\n", status.Behind)
 	}
 }
 

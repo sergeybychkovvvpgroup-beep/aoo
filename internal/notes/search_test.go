@@ -1,6 +1,9 @@
 package notes
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFilterMatchesMultiWordAcrossFields(t *testing.T) {
 	entries := []Entry{
@@ -94,5 +97,139 @@ func TestEntryActionSummarizesTemplate(t *testing.T) {
 
 	if got := entry.Action(); got != "TEMPLATE" {
 		t.Fatalf("expected template action summary, got %s", got)
+	}
+}
+
+func TestFilterBuildsPreviewFromMatchedShowText(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc: "router config",
+			Actions: []Action{{
+				Desc: "show",
+				Text: "alpha\nbeta\nset firewall group address-group NATUM address 178.154.247.75\ngamma",
+			}},
+		},
+	}
+
+	preview := BuildPreview(entries[0], "natum")
+	if preview.Section != "show" {
+		t.Fatalf("expected show preview, got %s", preview.Section)
+	}
+	if len(preview.Occurrences) == 0 {
+		t.Fatal("expected preview occurrences")
+	}
+	if !strings.Contains(preview.Text, "NATUM") {
+		t.Fatalf("expected preview text to preserve original content, got %q", preview.Text)
+	}
+}
+
+func TestFilterPreviewHandlesUnicodeWithoutPanic(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc: "маршрутизатор",
+			Actions: []Action{{
+				Desc: "show",
+				Text: "первая строка\nвторая строка\nмаршрутизатор vyos\nтретья строка",
+			}},
+		},
+	}
+
+	preview := BuildPreview(entries[0], "марш")
+	if len(preview.Occurrences) == 0 {
+		t.Fatal("expected unicode preview occurrences")
+	}
+}
+
+func TestFilterPreviewPrefersCandidateMatchingMoreQueryTerms(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc: "static-mapping",
+			Actions: []Action{{
+				Desc: "show",
+				Text: "set protocols static route 1.1.1.1/32 next-hop 10.0.0.1\nset protocols static route 2.2.2.2/32 next-hop 10.0.0.2",
+			}},
+		},
+	}
+
+	preview := BuildPreview(entries[0], "static-mappi")
+	if preview.Section != "title" {
+		t.Fatalf("expected title preview, got %s", preview.Section)
+	}
+}
+
+func TestFilterPreviewBuildsMultipleSnippets(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc: "router routes",
+			Actions: []Action{{
+				Desc: "show",
+				Text: "set protocols static route 1.1.1.1/32\nset protocols static route 2.2.2.2/32",
+			}},
+		},
+	}
+
+	preview := BuildPreview(entries[0], "static")
+	if len(preview.Snippets) < 2 {
+		t.Fatalf("expected multiple preview snippets, got %d", len(preview.Snippets))
+	}
+}
+
+func TestFilterPreviewPrioritizesLinesMatchingAllTerms(t *testing.T) {
+	entry := Entry{
+		Desc: "router cha",
+		Actions: []Action{{
+			Desc: "show",
+			Text: "set protocols static route 0.0.0.0/0 next-hop 1.1.1.1\n" +
+				"set protocols static route 8.8.8.0/24 next-hop 1.1.1.1\n" +
+				"set service dhcp-server subnet 10.120.0.0/16 static-mapping vyos-lan ip-address '10.120.0.5'\n",
+		}},
+	}
+
+	preview := BuildPreview(entry, "static-mapping")
+	if len(preview.Snippets) == 0 {
+		t.Fatal("expected preview snippets")
+	}
+	snippet := preview.Snippets[0]
+	runes := []rune(snippet.Text)
+	start := snippet.Occurrence.Start - 10
+	if start < 0 {
+		start = 0
+	}
+	end := snippet.Occurrence.End + 20
+	if end > len(runes) {
+		end = len(runes)
+	}
+	got := string(runes[start:end])
+	if !strings.Contains(got, "static-mapping") {
+		t.Fatalf("expected first snippet to contain static-mapping, got %q", got)
+	}
+}
+
+func TestFilterMatchesDottedNumericFragmentAsSingleTerm(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc: "vorsino pve proxmox",
+			Actions: []Action{{
+				Desc: "jump",
+				Text: "proxmox 192.168.53.53\nxray gateway 192.168.53.33",
+			}},
+			SourceFile: "vorsino-kim-ips.yaml",
+		},
+		{
+			Desc: "router cha",
+			Actions: []Action{{
+				Desc: "show",
+				Text: "set protocols static route 10.101.53.0/24 next-hop 10.115.250.201\nset protocols static route 10.101.13.2/32 next-hop 10.115.250.201",
+			}},
+			SourceFile: "router-b.yaml",
+		},
+	}
+
+	results := Filter(entries, "53.3")
+	if len(results) == 0 {
+		t.Fatal("expected matches")
+	}
+	if got := results[0].Entry.SourceFile; got != "vorsino-kim-ips.yaml" {
+		t.Fatalf("expected vorsino-kim-ips.yaml first, got %s", got)
 	}
 }

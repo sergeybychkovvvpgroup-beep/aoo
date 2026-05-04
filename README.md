@@ -78,74 +78,54 @@ aoo set-theme catppuccin-mocha
 Picker shortcuts:
 
 ```text
-Enter   open actions for selected note
-Alt+E   open selected note source in $VISUAL / $EDITOR
+Enter   open or run
+Ctrl+E  edit selected YAML
+Ctrl+N  create a new note from current query
 Esc     quit
-Left/Right switch tag filter
-Up/Down move
 ```
+
+Quick add:
+
+```bash
+aoo add "router dhcp"
+aoo add cmd "restart nginx"
+```
+
+Both commands create a YAML scaffold, open it in `$VISUAL` / `$EDITOR`, and after editor exit auto-commit + auto-push changes when `notes_dir` is a git repo.
 
 ## Notes Format
 
 ```yaml
 - desc: example ssh
-  actions:
-    - desc: show
-      text: main host access
-    - desc: ssh
-      cmd: ssh admin@example.local
+  text: main host access
+  cmd: ssh admin@example.local
 
 - desc: example url
-  actions:
-    - desc: show
-      text: https://service.example.local
+  text: https://service.example.local
 
 - desc: example nmap template
   tags: [nmap, scan]
-  actions:
-    - desc: nmap
-      template: sudo nmap -O {{host}}
-      args:
-        - name: host
-          prompt: Host or IP
-          example: 192.168.1.1
+  template: sudo nmap -O {{host}}
+  args:
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.1
 ```
 
 Behavior:
 
-- `Enter` always opens an action selector for the note
-- `actions` is the primary format
+- `Enter` runs the main action directly
+- if a note has `cmd`, `Enter` runs it
+- if a note has only `text`, `Enter` shows it
+- old `actions` format still works as a compatibility fallback
 - `text` shows text
-- `cmd` runs a command after confirmation
-- `template` asks for args, renders the final command, then asks for confirmation
+- `cmd` runs immediately after selection
+- `template` asks for args, renders the final command, and runs it immediately
 - `full_screen: true` uses the terminal alternate screen and full terminal height
 - when `full_screen: false`, picker height is limited by `picker_height`, so prior terminal output stays visible
 - `show_preview: false` makes each search result a single line
 - `preview_pane: true` shows a right-side preview panel like `fzf`
-- each action should have its own `desc`
-
-Multiple actions in one note:
-
-```yaml
-- desc: grep
-  actions:
-    - desc: show
-      text: common grep variants
-    - desc: grep in syslog
-      cmd: grep -i error /var/log/syslog
-    - desc: grep with context
-      cmd: grep -nC 3 error /var/log/syslog
-
-- desc: himki
-  actions:
-    - desc: show
-      text: main site access
-    - desc: ssh vyos
-      cmd: ssh vyos@himki
-    - desc: ssh tunnel
-      cmd: ssh -L 8443:10.10.10.1:443 vyos@himki
-      banner: https://127.0.0.1:8443
-```
+- keep one note = one main thing whenever possible
 
 Built-in template variables:
 
@@ -157,9 +137,7 @@ Config command example:
 
 ```yaml
 - desc: edit aoo config
-  actions:
-    - desc: open
-      cmd: $EDITOR {{aoo_config_file}}
+  cmd: $EDITOR {{aoo_config_file}}
 ```
 
 ## Themes

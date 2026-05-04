@@ -163,6 +163,7 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 		entry.SourceFile = filepath.Base(path)
 		entry.SourceLine = node.Line
 		entry.Tags = normalizedTags(entry.Tags, entry.SourceFile)
+		entry.searchData = weightedFields(entry)
 		entries = append(entries, entry)
 	}
 
@@ -230,6 +231,8 @@ func validateEntry(path string, line int, entry Entry) error {
 
 func normalizeLegacyEntry(entry Entry) Entry {
 	if len(entry.Actions) > 0 {
+		entry.Text = strings.TrimSpace(entry.Text)
+		entry.Cmd = strings.TrimSpace(entry.Cmd)
 		for i := range entry.Actions {
 			entry.Actions[i].Desc = strings.TrimSpace(entry.Actions[i].Desc)
 			entry.Actions[i].Cmd = strings.TrimSpace(entry.Actions[i].Cmd)
@@ -241,6 +244,21 @@ func normalizeLegacyEntry(entry Entry) Entry {
 	}
 
 	actions := make([]Action, 0, 1+len(entry.Run))
+	entry.Text = strings.TrimSpace(entry.Text)
+	entry.Cmd = strings.TrimSpace(entry.Cmd)
+	if entry.Cmd != "" {
+		actions = append(actions, Action{
+			Desc:   inferActionDesc(entry.Cmd, "run"),
+			Cmd:    entry.Cmd,
+			Banner: strings.TrimSpace(entry.Banner),
+		})
+	}
+	if entry.Text != "" {
+		actions = append(actions, Action{
+			Desc: "show",
+			Text: entry.Text,
+		})
+	}
 	if text := strings.TrimSpace(entry.Note); text != "" {
 		actions = append(actions, Action{
 			Desc: "show",

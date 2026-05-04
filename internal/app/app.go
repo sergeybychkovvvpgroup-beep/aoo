@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 
 	"aoo/internal/bundled"
 	"aoo/internal/config"
+	"aoo/internal/notecreate"
 	"aoo/internal/notes"
 	"aoo/internal/notesrepo"
 	"aoo/internal/templatecmd"
@@ -39,6 +39,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runSetAppDir(args[1:], stdout, stderr)
 		case "set-theme":
 			return runSetTheme(args[1:], stdout, stderr)
+		case "add":
+			return runAdd(args[1:], stdout, stderr)
 		case "version", "--version", "-v":
 			_, err := fmt.Fprintf(stdout, "aoo %s\n", version)
 			return err
@@ -88,41 +90,17 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		}
 	}
 
-	result := notes.LoadResult{}
-	if strings.TrimSpace(root) != "" {
-		result = notes.LoadDir(root)
-	}
-
-	if bundledResult := loadBundledNotes(); len(bundledResult.Entries) > 0 || len(bundledResult.Errors) > 0 {
-		for _, loadErr := range bundledResult.Errors {
-			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
-		}
-		result.Entries = mergeEntries(result.Entries, bundledResult.Entries)
-	}
-
-	if len(result.Errors) > 0 {
-		for _, loadErr := range result.Errors {
-			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
-		}
-		if *strict {
-			return errors.New("validation errors found")
-		}
-	}
-
-	if len(result.Entries) == 0 {
-		return errors.New("no notes found")
-	}
-
 	themeName, _, err := config.ResolveTheme(*themeFlag)
 	if err != nil {
 		return err
 	}
 
 	uiOptions := ui.Options{
-		FullScreen:  cfg.FullScreen,
-		Height:      cfg.PickerHeight,
-		ShowPreview: cfg.ShowPreview,
-		PreviewPane: cfg.PreviewPane,
+		FullScreen:   cfg.FullScreen,
+		Height:       cfg.PickerHeight,
+		PreviewWidth: cfg.PreviewWidth,
+		ShowPreview:  cfg.ShowPreview,
+		PreviewPane:  cfg.PreviewPane,
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -131,20 +109,48 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	currentQuery := *query
 	hasActiveUI := false
 	for {
+		result, err := loadInteractiveEntries(root, *strict, stderr)
+		if err != nil {
+			return err
+		}
 		if hasActiveUI && !uiOptions.FullScreen {
 			clearInteractiveArea(stdout, uiOptions.Height)
 		}
-		selected, nextQuery, cancelled, editRequested, err := ui.RunPicker(result.Entries, currentQuery, themeName, uiOptions)
+		selected, selectedLine, nextQuery, cancelled, editRequested, createKind, err := ui.RunPicker(result.Entries, currentQuery, themeName, uiOptions)
 		hasActiveUI = true
 		currentQuery = nextQuery
 		if err != nil {
 			return err
 		}
+		if createKind != "" {
+			if strings.TrimSpace(root) == "" {
+				return errors.New("notes_dir is not configured")
+			}
+			if err := createAndEditDraft(root, notecreate.Kind(createKind), currentQuery, stdout, stderr); err != nil {
+				return err
+			}
+			continue
+		}
 		if cancelled || selected == nil {
 			return nil
 		}
 		if editRequested {
-			return openEntryInEditor(*selected, stdout, stderr)
+			if err := openEntryInEditor(*selected, selectedLine, stdout, stderr); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if action := selected.QuickAction(); action != nil {
+			switch {
+			case action.IsShow():
+				printActionText(*selected, action, stdout)
+				return nil
+			case action.IsTemplate():
+				return runTemplate(*selected, action, stdin, stdout, stderr)
+			case action.IsCmd():
+				return runCommand(*selected, action, stdin, stdout, stderr)
+			}
 		}
 
 		if !uiOptions.FullScreen {
@@ -194,13 +200,9 @@ func runTemplate(entry notes.Entry, action *notes.Action, stdin io.Reader, stdou
 	if strings.TrimSpace(action.Desc) != "" {
 		title = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
 	}
-	prepared, confirmed, err := templatecmd.Prompt(title, *action, stdin, stdout, values)
+	prepared, err := templatecmd.Prompt(title, *action, stdin, stdout, values)
 	if err != nil {
 		return err
-	}
-	if !confirmed {
-		fmt.Fprintln(stdout, "cancelled")
-		return nil
 	}
 
 	if banner := strings.TrimSpace(action.Banner); banner != "" {
@@ -255,13 +257,8 @@ func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout
 		desc = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
 	}
 
-	confirmed, err := promptCommandRun(desc, command, stdin, stdout)
-	if err != nil {
+	if err := promptCommandRun(desc, command, stdout); err != nil {
 		return err
-	}
-	if !confirmed {
-		fmt.Fprintln(stdout, "cancelled")
-		return nil
 	}
 
 	if banner := strings.TrimSpace(banner); banner != "" {
@@ -275,20 +272,10 @@ func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout
 	return cmd.Run()
 }
 
-func promptCommandRun(desc, command string, stdin io.Reader, stdout io.Writer) (bool, error) {
-	reader := bufio.NewReader(stdin)
-
+func promptCommandRun(desc, command string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "[run] %s\n", desc)
 	fmt.Fprintf(stdout, "\n[command]\n%s\n", command)
-	fmt.Fprint(stdout, "run? [y/N]: ")
-
-	answer, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return false, err
-	}
-
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	return answer == "y" || answer == "yes", nil
+	return nil
 }
 
 func runConfig(args []string, stdout, stderr io.Writer) error {
@@ -385,6 +372,7 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
+	fmt.Fprintf(stdout, "preview_width: %d\n", cfg.PreviewWidth)
 	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
 	fmt.Fprintf(stdout, "preview_pane: %t\n", cfg.PreviewPane)
 	return nil
@@ -443,7 +431,26 @@ func runThemes(stdout io.Writer) error {
 	return nil
 }
 
-func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
+func runAdd(args []string, stdout, stderr io.Writer) error {
+	root, _, err := config.ResolveNotesDir("")
+	if err != nil {
+		return err
+	}
+
+	kind := notecreate.KindNote
+	start := 0
+	if len(args) > 0 {
+		switch notecreate.Kind(args[0]) {
+		case notecreate.KindNote, notecreate.KindCommand:
+			kind = notecreate.Kind(args[0])
+			start = 1
+		}
+	}
+	title := strings.TrimSpace(strings.Join(args[start:], " "))
+	return createAndEditDraft(root, kind, title, stdout, stderr)
+}
+
+func openEntryInEditor(entry notes.Entry, line int, stdout, stderr io.Writer) error {
 	if strings.TrimSpace(entry.SourcePath) == "" {
 		return errors.New("selected note has no source file")
 	}
@@ -456,10 +463,17 @@ func openEntryInEditor(entry notes.Entry, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		line := bundled.FindEntryLine(path, entry.Desc)
-		return openPathInEditor(path, line, stdout, stderr)
+		targetLine := line
+		if targetLine <= 0 {
+			targetLine = bundled.FindEntryLine(path, entry.Desc)
+		}
+		return openPathInEditor(path, targetLine, fmt.Sprintf("aoo: update %s", filepath.Base(path)), stdout, stderr)
 	}
-	return openPathInEditor(entry.SourcePath, entry.SourceLine, stdout, stderr)
+	targetLine := line
+	if targetLine <= 0 {
+		targetLine = entry.SourceLine
+	}
+	return openPathInEditor(entry.SourcePath, targetLine, fmt.Sprintf("aoo: update %s", filepath.Base(entry.SourcePath)), stdout, stderr)
 }
 
 func openConfigInEditor(stdout, stderr io.Writer) error {
@@ -467,10 +481,10 @@ func openConfigInEditor(stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return openPathInEditor(configPath, 0, stdout, stderr)
+	return openPathInEditor(configPath, 0, "", stdout, stderr)
 }
 
-func openPathInEditor(path string, line int, stdout, stderr io.Writer) error {
+func openPathInEditor(path string, line int, commitMessage string, stdout, stderr io.Writer) error {
 	editor := strings.TrimSpace(os.Getenv("VISUAL"))
 	if editor == "" {
 		editor = strings.TrimSpace(os.Getenv("EDITOR"))
@@ -495,7 +509,14 @@ func openPathInEditor(path string, line int, stdout, stderr io.Writer) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	if err := notesrepo.AutoCommitPushPath(path, commitMessage, stdout, stderr); err != nil {
+		return err
+	}
+	return nil
 }
 
 func printActionText(entry notes.Entry, action *notes.Action, stdout io.Writer) {
@@ -539,6 +560,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Extra commands:")
 	fmt.Fprintln(w, "  aoo version")
 	fmt.Fprintln(w, "  aoo validate --dir PATH")
+	fmt.Fprintln(w, "  aoo add [title]")
+	fmt.Fprintln(w, "  aoo add cmd [title]")
 	fmt.Fprintln(w, "  aoo set-source")
 }
 
@@ -603,6 +626,45 @@ func mergeEntries(primary, secondary []notes.Entry) []notes.Entry {
 	}
 
 	return merged
+}
+
+func loadInteractiveEntries(root string, strict bool, stderr io.Writer) (notes.LoadResult, error) {
+	result := notes.LoadResult{}
+	if strings.TrimSpace(root) != "" {
+		result = notes.LoadDir(root)
+	}
+
+	if bundledResult := loadBundledNotes(); len(bundledResult.Entries) > 0 || len(bundledResult.Errors) > 0 {
+		for _, loadErr := range bundledResult.Errors {
+			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
+		}
+		result.Entries = mergeEntries(result.Entries, bundledResult.Entries)
+	}
+
+	if len(result.Errors) > 0 {
+		for _, loadErr := range result.Errors {
+			fmt.Fprintf(stderr, "warn: %v\n", loadErr)
+		}
+		if strict {
+			return notes.LoadResult{}, errors.New("validation errors found")
+		}
+	}
+	if len(result.Entries) == 0 {
+		return notes.LoadResult{}, errors.New("no notes found")
+	}
+	return result, nil
+}
+
+func createAndEditDraft(root string, kind notecreate.Kind, title string, stdout, stderr io.Writer) error {
+	draft, err := notecreate.Create(root, kind, title)
+	if err != nil {
+		return err
+	}
+
+	if err := openPathInEditor(draft.Path, draft.Line, draft.CommitMessage, stdout, stderr); err != nil {
+		return err
+	}
+	return nil
 }
 
 func repoUpdateHint() (string, bool) {

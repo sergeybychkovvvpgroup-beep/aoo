@@ -1,77 +1,63 @@
 - desc: aoo-help
-  actions:
-  - desc: show
-    text: |-
-      aoo = terminal notes + command launcher.
+  text: |-
+    aoo = terminal notes + command launcher.
 
-      Start:
-        aoo
-        aoo --query ssh
+    Start:
+      aoo
+      aoo --query ssh
 
-      Settings:
-        run: aoo config
-        inspect: aoo config show
+    Main keys:
+      Enter = open/run
+      Ctrl+E = edit
+      Ctrl+N = new note
+      Esc = quit
 
-      Validate notes:
-        aoo validate --dir ~/.local/share/aoo/notes
+    Settings:
+      run: aoo config
+      inspect: aoo config show
 
-      Useful searches:
-        ssh
-        vyos
-        git
-        theme
-        aoo
+    Validate notes:
+      aoo validate --dir ~/.local/share/aoo/notes
+
+    Useful searches:
+      ssh
+      vyos
+      git
+      theme
+      aoo
 - desc: aoo set source
   tags:
   - aoo
-  actions:
-  - desc: set source
-    cmd: aoo set-source
+  cmd: aoo set-source
 - desc: aoo config edit
   tags:
   - aoo
-  actions:
-  - desc: open config
-    cmd: aoo config
+  cmd: aoo config
 - desc: aoo config show
   tags:
   - aoo
-  actions:
-  - desc: show config
-    cmd: aoo config show
+  cmd: aoo config show
 - desc: aoo list themes
   tags:
   - aoo
-  actions:
-  - desc: list themes
-    cmd: aoo themes
+  cmd: aoo themes
 - desc: aoo version
   tags:
   - aoo
-  actions:
-  - desc: version
-    cmd: aoo version
+  cmd: aoo version
 - desc: aoo make build
   tags:
   - aoo
-  actions:
-  - desc: make
-    cmd: make build
+  cmd: make build
 - desc: aoo make update
   tags:
   - aoo
-  actions:
-  - desc: make
-    cmd: sudo make update
+  cmd: sudo make update
 - desc: aoo make test
   tags:
   - aoo
-  actions:
-  - desc: make
-    cmd: make test
+  cmd: make test
 - desc: aoo make validate
   tags:
   - aoo
-  actions:
-  - desc: make
-    cmd: make validate
+  cmd: make validate

@@ -89,6 +89,25 @@ func TestLoadBytesSupportsLegacyFields(t *testing.T) {
 	}
 }
 
+func TestLoadBytesAcceptsLiteFields(t *testing.T) {
+	result := LoadBytes("notes.yaml", []byte(`
+- desc: router ssh
+  text: main access
+  cmd: ssh root@router
+`))
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no errors, got %v", result.Errors)
+	}
+	entry := result.Entries[0]
+	if !entry.HasShow() || !entry.HasCmd() {
+		t.Fatalf("expected lite fields to normalize into actions")
+	}
+	if action := entry.QuickAction(); action == nil || !action.IsCmd() {
+		t.Fatalf("expected quick action to prefer cmd, got %#v", action)
+	}
+}
+
 func TestLoadBytesAcceptsMultipleCommandActions(t *testing.T) {
 	result := LoadBytes("notes.yaml", []byte(`
 - desc: himki

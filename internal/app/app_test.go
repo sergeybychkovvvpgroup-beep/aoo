@@ -6,15 +6,11 @@ import (
 	"testing"
 )
 
-func TestPromptCommandRunConfirmsYes(t *testing.T) {
+func TestPromptCommandRunPrintsCommandWithoutConfirmation(t *testing.T) {
 	var stdout bytes.Buffer
 
-	confirmed, err := promptCommandRun("List files", "ls -la", strings.NewReader("y\n"), &stdout)
-	if err != nil {
+	if err := promptCommandRun("List files", "ls -la", &stdout); err != nil {
 		t.Fatalf("promptCommandRun returned error: %v", err)
-	}
-	if !confirmed {
-		t.Fatal("expected confirmation to be accepted")
 	}
 
 	output := stdout.String()
@@ -24,16 +20,7 @@ func TestPromptCommandRunConfirmsYes(t *testing.T) {
 	if !strings.Contains(output, "[command]\nls -la") {
 		t.Fatalf("expected command to be printed, got %q", output)
 	}
-}
-
-func TestPromptCommandRunRejectsDefault(t *testing.T) {
-	var stdout bytes.Buffer
-
-	confirmed, err := promptCommandRun("List files", "ls -la", strings.NewReader("\n"), &stdout)
-	if err != nil {
-		t.Fatalf("promptCommandRun returned error: %v", err)
-	}
-	if confirmed {
-		t.Fatal("expected empty answer to cancel execution")
+	if strings.Contains(output, "run?") {
+		t.Fatalf("expected no confirmation prompt, got %q", output)
 	}
 }

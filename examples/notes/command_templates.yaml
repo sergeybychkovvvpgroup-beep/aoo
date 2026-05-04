@@ -3,130 +3,112 @@
   - template
   - find
   - files
-  actions:
-  - desc: find
-    template: find {{path}} -type f -name {{pattern}}
-    args:
-    - name: path
-      prompt: Path
-      default: .
-      example: /etc
-    - name: pattern
-      prompt: File name pattern
-      default: '*.yaml'
-      example: '*.conf'
+  template: find {{path}} -type f -name {{pattern}}
+  args:
+  - name: path
+    prompt: Path
+    default: .
+    example: /etc
+  - name: pattern
+    prompt: File name pattern
+    default: '*.yaml'
+    example: '*.conf'
 - desc: grep text in files recursively
   tags:
   - template
   - grep
   - search
-  actions:
-  - desc: grep
-    template: grep -Rni --color=always {{pattern}} {{path}}
-    args:
-    - name: pattern
-      prompt: Text or regex
-      example: ERROR|CRITICAL
-    - name: path
-      prompt: Path
-      default: .
-      example: /var/log
+  template: grep -Rni --color=always {{pattern}} {{path}}
+  args:
+  - name: pattern
+    prompt: Text or regex
+    example: ERROR|CRITICAL
+  - name: path
+    prompt: Path
+    default: .
+    example: /var/log
 - desc: aoo rebuild and install
   tags:
   - template
   - aoo
   - build
   - install
-  actions:
-  - desc: make
-    template: make -C {{aoo_app_dir}} build && sudo make -C {{aoo_app_dir}} install
-    args: []
+  template: make -C {{aoo_app_dir}} build && sudo make -C {{aoo_app_dir}} install
+  args: []
 - desc: aoo git add commit push
   tags:
   - template
   - aoo
   - git
   - push
-  actions:
-  - desc: git
-    template: git -C {{aoo_app_dir}} add . && git -C {{aoo_app_dir}} commit -m {{message}} && git -C {{aoo_app_dir}} push
-    args:
-    - name: message
-      prompt: Commit message
-      default: update
-      example: tweak search ranking
+  template: git -C {{aoo_app_dir}} add . && git -C {{aoo_app_dir}} commit -m {{message}} && git -C {{aoo_app_dir}} push
+  args:
+  - name: message
+    prompt: Commit message
+    default: update
+    example: tweak search ranking
 - desc: notes git pull
   tags:
   - template
   - notes
   - git
   - pull
-  actions:
-  - desc: git
-    template: git -C {{aoo_notes_dir}} pull --rebase
-    args: []
+  template: git -C {{aoo_notes_dir}} pull --rebase
+  args: []
 - desc: notes git add commit push
   tags:
   - template
   - notes
   - git
   - push
-  actions:
-  - desc: git
-    template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m {{message}} && git -C {{aoo_notes_dir}} push
-    args:
-    - name: message
-      prompt: Commit message
-      default: update notes
-      example: add new hosts
+  template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m {{message}} && git -C {{aoo_notes_dir}} push
+  args:
+  - name: message
+    prompt: Commit message
+    default: update notes
+    example: add new hosts
 - desc: curl check url headers
   tags:
   - template
   - curl
   - http
-  actions:
-  - desc: curl
-    template: curl -kI {{url}}
-    args:
-    - name: url
-      prompt: URL
-      example: https://example.local:8443
+  template: curl -kI {{url}}
+  args:
+  - name: url
+    prompt: URL
+    example: https://example.local:8443
 - desc: ssh through jump host
   tags:
   - template
   - ssh
   - jump
-  actions:
-  - desc: ssh
-    template: ssh -J {{jump_user}}@{{jump_host}} {{target_user}}@{{target_host}}
-    args:
-    - name: jump_user
-      prompt: Jump user
-      default: root
-      example: sergeyb
-    - name: jump_host
-      prompt: Jump host
-      example: 192.168.1.10
-    - name: target_user
-      prompt: Target user
-      default: root
-      example: admin
-    - name: target_host
-      prompt: Target host
-      example: 10.0.0.10
+  template: ssh -J {{jump_user}}@{{jump_host}} {{target_user}}@{{target_host}}
+  args:
+  - name: jump_user
+    prompt: Jump user
+    default: root
+    example: sergeyb
+  - name: jump_host
+    prompt: Jump host
+    example: 192.168.1.10
+  - name: target_user
+    prompt: Target user
+    default: root
+    example: admin
+  - name: target_host
+    prompt: Target host
+    example: 10.0.0.10
 - desc: dig dns record
   tags:
   - template
   - dns
   - dig
-  actions:
-  - desc: dig
-    template: dig {{name}} {{record_type}} +short
-    args:
-    - name: name
-      prompt: DNS name
-      example: nas.example.local
-    - name: record_type
-      prompt: Record type
-      default: A
-      example: AAAA
+  template: dig {{name}} {{record_type}} +short
+  args:
+  - name: name
+    prompt: DNS name
+    example: nas.example.local
+  - name: record_type
+    prompt: Record type
+    default: A
+    example: AAAA

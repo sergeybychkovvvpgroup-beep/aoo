@@ -17,7 +17,7 @@ type Prepared struct {
 	Values  map[string]string
 }
 
-func Prompt(title string, action notes.Action, stdin io.Reader, stdout io.Writer, baseValues map[string]string) (Prepared, bool, error) {
+func Prompt(title string, action notes.Action, stdin io.Reader, stdout io.Writer, baseValues map[string]string) (Prepared, error) {
 	reader := bufio.NewReader(stdin)
 	values := make(map[string]string, len(action.Args)+len(baseValues))
 	for key, value := range baseValues {
@@ -48,7 +48,7 @@ func Prompt(title string, action notes.Action, stdin io.Reader, stdout io.Writer
 		fmt.Fprintf(stdout, "%s: ", label)
 		raw, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			return Prepared{}, false, err
+			return Prepared{}, err
 		}
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
@@ -62,21 +62,11 @@ func Prompt(title string, action notes.Action, stdin io.Reader, stdout io.Writer
 
 	command, err := Render(action.Template, values)
 	if err != nil {
-		return Prepared{}, false, err
+		return Prepared{}, err
 	}
 
 	fmt.Fprintf(stdout, "\n[command]\n%s\n", command)
-	fmt.Fprint(stdout, "run? [y/N]: ")
-	answer, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return Prepared{}, false, err
-	}
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer != "y" && answer != "yes" {
-		return Prepared{Command: command, Values: values}, false, nil
-	}
-
-	return Prepared{Command: command, Values: values}, true, nil
+	return Prepared{Command: command, Values: values}, nil
 }
 
 func Render(template string, values map[string]string) (string, error) {

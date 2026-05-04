@@ -2,6 +2,7 @@ package notes
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -114,6 +115,8 @@ func (r *RunCommands) UnmarshalYAML(node *yaml.Node) error {
 
 type Entry struct {
 	Desc       string      `yaml:"desc"`
+	Text       string      `yaml:"text"`
+	Cmd        string      `yaml:"cmd"`
 	Mode       string      `yaml:"mode"`
 	Actions    []Action    `yaml:"actions"`
 	Run        RunCommands `yaml:"run"`
@@ -125,7 +128,36 @@ type Entry struct {
 	SourcePath string      `yaml:"-"`
 	SourceFile string      `yaml:"-"`
 	SourceLine int         `yaml:"-"`
+	searchData []weightedField `yaml:"-"`
 	index      int
+}
+
+func (e Entry) PreviewHitLine(preview PreviewMatch, hitIndex int) int {
+	if strings.TrimSpace(e.SourcePath) == "" {
+		return e.SourceLine
+	}
+	if len(preview.Snippets) == 0 || hitIndex < 0 || hitIndex >= len(preview.Snippets) {
+		return e.SourceLine
+	}
+	lineText := previewSnippetLine(preview.Snippets[hitIndex])
+	if strings.TrimSpace(lineText) == "" {
+		return e.SourceLine
+	}
+	raw, err := os.ReadFile(e.SourcePath)
+	if err != nil {
+		return e.SourceLine
+	}
+	lines := strings.Split(string(raw), "\n")
+	start := e.SourceLine - 1
+	if start < 0 {
+		start = 0
+	}
+	for i := start; i < len(lines); i++ {
+		if strings.Contains(lines[i], strings.TrimSpace(lineText)) {
+			return i + 1
+		}
+	}
+	return e.SourceLine
 }
 
 const TypeAll = "ALL"
@@ -240,6 +272,17 @@ func (e Entry) FirstShowAction() *Action {
 }
 
 func (e Entry) Action() string {
+	if e.IsLite() {
+		switch {
+		case strings.TrimSpace(e.Cmd) != "":
+			return "RUN"
+		case strings.TrimSpace(e.Template) != "":
+			return "TEMPLATE"
+		case strings.TrimSpace(e.Text) != "":
+			return "SHOW"
+		}
+	}
+
 	parts := make([]string, 0, 3)
 	if e.HasShow() {
 		parts = append(parts, "SHOW")
@@ -262,6 +305,17 @@ func (e Entry) Action() string {
 }
 
 func (e Entry) DisplayValue() string {
+	if e.IsLite() {
+		switch {
+		case strings.TrimSpace(e.Cmd) != "":
+			return oneLine(e.Cmd, 90)
+		case strings.TrimSpace(e.Template) != "":
+			return oneLine(e.Template, 90)
+		case strings.TrimSpace(e.Text) != "":
+			return oneLine(e.Text, 90)
+		}
+	}
+
 	actions := e.normalizedActions()
 	if len(actions) == 0 {
 		return ""
@@ -279,7 +333,7 @@ func (e Entry) Title() string {
 }
 
 func (e Entry) SearchFields() []string {
-	fields := []string{e.Desc, e.SourceFile}
+	fields := []string{e.Desc, e.SourceFile, e.Text, e.Cmd}
 	for _, action := range e.normalizedActions() {
 		fields = append(fields, action.Desc, action.Cmd, action.Text, action.Template, action.Banner)
 		for _, arg := range action.Args {
@@ -298,12 +352,60 @@ func oneLine(text string, limit int) string {
 	return text[:limit-3] + "..."
 }
 
+func (e Entry) IsLite() bool {
+	return strings.TrimSpace(e.Text) != "" || strings.TrimSpace(e.Cmd) != "" || strings.TrimSpace(e.Template) != ""
+}
+
+func (e Entry) QuickAction() *Action {
+	if e.IsLite() {
+		switch {
+		case strings.TrimSpace(e.Cmd) != "":
+			return &Action{
+				Desc:   inferActionDesc(e.Cmd, "run"),
+				Cmd:    strings.TrimSpace(e.Cmd),
+				Banner: strings.TrimSpace(e.Banner),
+			}
+		case strings.TrimSpace(e.Template) != "":
+			return &Action{
+				Desc:     inferActionDesc(e.Template, "run"),
+				Template: strings.TrimSpace(e.Template),
+				Args:     e.Args,
+				Banner:   strings.TrimSpace(e.Banner),
+			}
+		case strings.TrimSpace(e.Text) != "":
+			return &Action{
+				Desc: "show",
+				Text: strings.TrimSpace(e.Text),
+			}
+		}
+	}
+
+	actions := e.normalizedActions()
+	if len(actions) != 1 {
+		return nil
+	}
+	return &actions[0]
+}
+
 func (e Entry) normalizedActions() []Action {
 	if len(e.Actions) > 0 {
 		return e.Actions
 	}
 
-	actions := make([]Action, 0, 1+len(e.Run))
+	actions := make([]Action, 0, 1+len(e.Run)+2)
+	if cmd := strings.TrimSpace(e.Cmd); cmd != "" {
+		actions = append(actions, Action{
+			Desc:   inferActionDesc(cmd, "run"),
+			Cmd:    cmd,
+			Banner: strings.TrimSpace(e.Banner),
+		})
+	}
+	if text := strings.TrimSpace(e.Text); text != "" {
+		actions = append(actions, Action{
+			Desc: "show",
+			Text: text,
+		})
+	}
 	if text := strings.TrimSpace(e.Note); text != "" {
 		actions = append(actions, Action{
 			Desc: "show",
