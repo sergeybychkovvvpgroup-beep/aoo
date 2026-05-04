@@ -23,11 +23,10 @@ type File struct {
 	NotesRepo     string `yaml:"notes_repo"`
 	AppDir        string `yaml:"app_dir"`
 	Theme         string `yaml:"theme"`
+	Layout        string `yaml:"layout"`
 	FullScreen    bool   `yaml:"full_screen"`
 	PickerHeight  int    `yaml:"picker_height"`
-	PreviewWidth  int    `yaml:"preview_width"`
 	ShowPreview   bool   `yaml:"show_preview"`
-	PreviewPane   bool   `yaml:"preview_pane"`
 	LastRepoCheck string `yaml:"last_repo_check"`
 }
 
@@ -36,11 +35,10 @@ type rawFile struct {
 	NotesRepo     string `yaml:"notes_repo"`
 	AppDir        string `yaml:"app_dir"`
 	Theme         string `yaml:"theme"`
+	Layout        string `yaml:"layout"`
 	FullScreen    *bool  `yaml:"full_screen"`
 	PickerHeight  *int   `yaml:"picker_height"`
-	PreviewWidth  *int   `yaml:"preview_width"`
 	ShowPreview   *bool  `yaml:"show_preview"`
-	PreviewPane   *bool  `yaml:"preview_pane"`
 	LastRepoCheck string `yaml:"last_repo_check"`
 }
 
@@ -81,12 +79,11 @@ func ConfigPath() (string, error) {
 
 func DefaultFile() File {
 	return File{
-		Theme:        "auto",
+		Theme:        "fzf-dark",
+		Layout:       "bottom",
 		FullScreen:   true,
 		PickerHeight: 14,
-		PreviewWidth: 52,
 		ShowPreview:  false,
-		PreviewPane:  false,
 	}
 }
 
@@ -120,28 +117,23 @@ func Load() (File, error) {
 	if value := strings.TrimSpace(parsed.Theme); value != "" {
 		cfg.Theme = value
 	}
+	if value := strings.TrimSpace(parsed.Layout); value != "" {
+		cfg.Layout = normalizeLayout(value)
+	}
 	if parsed.FullScreen != nil {
 		cfg.FullScreen = *parsed.FullScreen
 	}
 	if parsed.PickerHeight != nil {
 		cfg.PickerHeight = *parsed.PickerHeight
 	}
-	if parsed.PreviewWidth != nil {
-		cfg.PreviewWidth = *parsed.PreviewWidth
-	}
 	if parsed.ShowPreview != nil {
 		cfg.ShowPreview = *parsed.ShowPreview
-	}
-	if parsed.PreviewPane != nil {
-		cfg.PreviewPane = *parsed.PreviewPane
 	}
 	cfg.LastRepoCheck = strings.TrimSpace(parsed.LastRepoCheck)
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = 6
 	}
-	if cfg.PreviewWidth < 32 {
-		cfg.PreviewWidth = DefaultFile().PreviewWidth
-	}
+	cfg.Layout = normalizeLayout(cfg.Layout)
 	return cfg, nil
 }
 
@@ -320,7 +312,7 @@ func ResolveTheme(cliValue string) (string, string, error) {
 		return value, "config", nil
 	}
 
-	return "auto", "default", nil
+	return DefaultFile().Theme, "default", nil
 }
 
 func SetTheme(theme string) (string, error) {
@@ -358,6 +350,7 @@ func renderConfig(cfg File) string {
 	cfg.NotesRepo = strings.TrimSpace(cfg.NotesRepo)
 	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
 	cfg.Theme = strings.TrimSpace(cfg.Theme)
+	cfg.Layout = normalizeLayout(cfg.Layout)
 	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
 	if cfg.Theme == "" {
 		cfg.Theme = DefaultFile().Theme
@@ -365,75 +358,32 @@ func renderConfig(cfg File) string {
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = DefaultFile().PickerHeight
 	}
-	if cfg.PreviewWidth < 32 {
-		cfg.PreviewWidth = DefaultFile().PreviewWidth
-	}
-
 	lines := []string{
-		"# aoo config",
-		"#",
-		"# All user settings live here.",
-		"# Edit this file directly instead of keeping setup/help values in notes.",
-		"#",
-		"# Notes directory with your YAML files.",
-		"# Example: /root/.local/share/aoo/notes",
+		"# aoo",
+		"# themes: fzf-dark, catppuccin-mocha, catppuccin-latte, dracula, nord, solarized-dark, solarized-light",
+		"# layout: top | bottom",
 		"notes_dir: " + yamlScalar(cfg.NotesDir),
-		"",
-		"# Optional git repo URL for the notes source.",
-		"# Used by `aoo set-source` and repo status hints.",
 		"notes_repo: " + yamlScalar(cfg.NotesRepo),
-		"",
-		"# Optional path to the aoo app checkout.",
-		"# Built-in templates can use {{aoo_app_dir}}.",
 		"app_dir: " + yamlScalar(cfg.AppDir),
-		"",
-		"# UI theme. Use `aoo themes` to list available values.",
-		"# Recommended: auto, nord, catppuccin-mocha, solarized-dark.",
 		"theme: " + yamlScalar(cfg.Theme),
-		"",
-		"# Enable full-screen TUI mode.",
-		"# true  = use the terminal alternate screen and full terminal height",
-		"# false = keep the compact inline picker mode",
+		"layout: " + yamlScalar(cfg.Layout),
 		"full_screen: " + yamlScalarBool(cfg.FullScreen),
-		"",
-		"# Picker height in terminal rows.",
-		"# Used only when full_screen is false.",
-		"# Keep this small to see prior terminal output.",
-		"# Minimum value is 6. Recommended range: 10-18.",
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
-		"",
-		"# Preview pane width in terminal columns.",
-		"# Used when preview_pane is true.",
-		"# Minimum value is 32. Recommended range: 40-80.",
-		"preview_width: " + strconv.Itoa(cfg.PreviewWidth),
-		"",
-		"# Show second-line preview in the search results.",
-		"# true  = title + preview line",
-		"# false = one result per line",
 		"show_preview: " + yamlScalarBool(cfg.ShowPreview),
-		"",
-		"# Show a side preview pane like fzf.",
-		"# The pane renders the selected note/command details on the right side.",
-		"preview_pane: " + yamlScalarBool(cfg.PreviewPane),
-		"",
-		"# Internal timestamp for repo update checks.",
-		"# Safe to leave empty.",
-		"last_repo_check: " + yamlScalar(cfg.LastRepoCheck),
-		"",
-		"# Quick reference:",
-		"# - start: aoo",
-		"# - validate notes: aoo validate --dir /path/to/notes",
-		"# - edit config: aoo config",
-		"# - inspect current config: aoo config show",
-		"#",
-		"# Environment overrides:",
-		"# - AOO_CONFIG_FILE",
-		"# - AOO_NOTES_DIR",
-		"# - AOO_APP_DIR",
-		"# - AOO_THEME",
 		"",
 	}
 	return strings.Join(lines, "\n")
+}
+
+func normalizeLayout(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "top":
+		return "top"
+	case "bottom":
+		return "bottom"
+	default:
+		return DefaultFile().Layout
+	}
 }
 
 func yamlScalar(value string) string {

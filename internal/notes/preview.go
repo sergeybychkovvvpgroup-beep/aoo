@@ -5,7 +5,6 @@ import (
 	"unicode"
 )
 
-const maxPreviewSnippets = 12
 const maxOccurrencesPerTerm = 4
 
 type lineSnippet struct {
@@ -60,7 +59,7 @@ func buildPreview(entry Entry, terms []string) PreviewMatch {
 		if rank.matchedTerms == 0 {
 			continue
 		}
-		occurrences := collectOccurrences(candidate.text, terms, maxPreviewSnippets)
+		occurrences := collectOccurrences(candidate.text, terms, 0)
 		rank.occurrenceCount = len(occurrences)
 		if !hasBest || betterPreviewRank(rank, bestRank) {
 			hasBest = true
@@ -247,10 +246,6 @@ func buildSnippets(section, text string, terms []string) []PreviewSnippet {
 		return nil
 	}
 	sortLineSnippets(candidates)
-	if len(candidates) > maxPreviewSnippets {
-		candidates = candidates[:maxPreviewSnippets]
-	}
-
 	snippets := make([]PreviewSnippet, 0, len(candidates))
 	for _, item := range candidates {
 		snippets = append(snippets, PreviewSnippet{

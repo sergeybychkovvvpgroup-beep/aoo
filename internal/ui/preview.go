@@ -343,6 +343,9 @@ func previewPaneLines(preview notes.PreviewMatch, width, height, activeIndex int
 	}
 	snippet := preview.Snippets[activeIndex]
 	lines := previewExcerpt(snippet, width, height)
+	if height == 1 && len(lines) > 1 {
+		lines = lines[:1]
+	}
 	rendered := make([]string, 0, len(lines))
 	for _, line := range lines {
 		rendered = append(rendered, renderPreviewLine(line, snippet.Section, theme))

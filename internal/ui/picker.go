@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -17,8 +16,6 @@ type PickerModel struct {
 	entries      []notes.Entry
 	matches      []notes.Match
 	preview      notes.PreviewMatch
-	tags         []string
-	tagIndex     int
 	options      Options
 	cursor       int
 	width        int
@@ -50,7 +47,6 @@ func NewPicker(entries []notes.Entry, initialQuery string, theme Theme, options 
 	m := PickerModel{
 		input:        input,
 		entries:      entries,
-		tags:         availableTags(entries),
 		theme:        theme,
 		options:      options,
 		previewCache: make(map[string]notes.PreviewMatch),
@@ -134,21 +130,6 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.refreshPreview()
 			}
 			return m, nil
-		case "tab":
-			if len(m.tags) > 1 {
-				m.tagIndex = (m.tagIndex + 1) % len(m.tags)
-				m.refresh()
-			}
-			return m, nil
-		case "shift+tab":
-			if len(m.tags) > 1 {
-				m.tagIndex--
-				if m.tagIndex < 0 {
-					m.tagIndex = len(m.tags) - 1
-				}
-				m.refresh()
-			}
-			return m, nil
 		}
 	}
 
@@ -175,22 +156,45 @@ func (m PickerModel) View() string {
 	contentWidth := m.contentWidth()
 	effectiveHeight := m.effectiveHeight()
 
-	lines := []string{inputBox.Render(m.input.View())}
-	if strings.TrimSpace(m.input.Value()) != "" {
-		lines = append(lines, "")
-		lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle)...)
-		lines = append(lines, "")
-		lines = append(lines, titleStyle.Render(m.statusLine()))
-	}
-	lines = append(lines, helpStyle.Render("enter open  ctrl+n new  ctrl+e edit  esc quit"))
+	inputLine := inputBox.Render(m.input.View())
+	helpLine := helpStyle.Render(pickerHelpText())
+	lines := make([]string, 0, maxInt(6, effectiveHeight))
 
-	if effectiveHeight > 0 && len(lines) < effectiveHeight {
-		fillerAt := len(lines) - 1
-		padding := make([]string, 0, effectiveHeight-len(lines))
-		for len(lines)+len(padding) < effectiveHeight {
-			padding = append(padding, "")
+	if m.isBottomLayout() {
+		if strings.TrimSpace(m.input.Value()) != "" {
+			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle)...)
+			lines = append(lines, "")
+			lines = append(lines, titleStyle.Render(m.statusLine()))
 		}
-		lines = append(lines[:fillerAt], append(padding, lines[fillerAt:]...)...)
+		lines = append(lines, helpLine, inputLine)
+		if effectiveHeight > 0 && len(lines) < effectiveHeight {
+			padding := make([]string, 0, effectiveHeight-len(lines))
+			for len(lines)+len(padding) < effectiveHeight {
+				padding = append(padding, "")
+			}
+			anchor := len(lines) - 2
+			if anchor < 0 {
+				anchor = 0
+			}
+			lines = append(lines[:anchor], append(padding, lines[anchor:]...)...)
+		}
+	} else {
+		lines = append(lines, inputLine)
+		if strings.TrimSpace(m.input.Value()) != "" {
+			lines = append(lines, "")
+			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle)...)
+			lines = append(lines, "")
+			lines = append(lines, titleStyle.Render(m.statusLine()))
+		}
+		lines = append(lines, helpLine)
+		if effectiveHeight > 0 && len(lines) < effectiveHeight {
+			fillerAt := len(lines) - 1
+			padding := make([]string, 0, effectiveHeight-len(lines))
+			for len(lines)+len(padding) < effectiveHeight {
+				padding = append(padding, "")
+			}
+			lines = append(lines[:fillerAt], append(padding, lines[fillerAt:]...)...)
+		}
 	}
 
 	mainView := containerStyle.
@@ -225,7 +229,7 @@ func (m PickerModel) Query() string {
 }
 
 func (m *PickerModel) refresh() {
-	m.matches = notes.Filter(m.filteredEntries(), m.input.Value())
+	m.matches = notes.Filter(m.entries, m.input.Value())
 	if m.cursor >= len(m.matches) {
 		m.cursor = len(m.matches) - 1
 	}
@@ -242,24 +246,6 @@ func (m *PickerModel) refreshPreview() {
 		return
 	}
 	m.preview = m.cachedPreview(m.matches[m.cursor].Entry)
-}
-
-func (m PickerModel) filteredEntries() []notes.Entry {
-	tag := m.activeTag()
-	if tag == notes.TypeAll {
-		return m.entries
-	}
-
-	filtered := make([]notes.Entry, 0, len(m.entries))
-	for _, entry := range m.entries {
-		for _, entryTag := range entry.Tags {
-			if entryTag == tag {
-				filtered = append(filtered, entry)
-				break
-			}
-		}
-	}
-	return filtered
 }
 
 func (m PickerModel) visibleMatches() []notes.Match {
@@ -304,7 +290,7 @@ func (m PickerModel) maxVisibleItems() int {
 	if available < 6 {
 		available = 6
 	}
-	maxItems := available / 3
+	maxItems := available / m.resultRowHeight()
 	if maxItems < 2 {
 		maxItems = 2
 	}
@@ -381,49 +367,37 @@ func (m PickerModel) inputWidth() int {
 	return m.contentWidth() - 4
 }
 
-func (m PickerModel) activeTag() string {
-	if len(m.tags) == 0 {
-		return notes.TypeAll
-	}
-	if m.tagIndex < 0 || m.tagIndex >= len(m.tags) {
-		return notes.TypeAll
-	}
-	return m.tags[m.tagIndex]
+func (m PickerModel) isBottomLayout() bool {
+	return strings.EqualFold(strings.TrimSpace(m.options.Layout), "bottom")
 }
 
-func availableTags(entries []notes.Entry) []string {
-	seen := map[string]struct{}{
-		notes.TypeAll: {},
-	}
-	tags := []string{notes.TypeAll}
-	var collected []string
+func (m PickerModel) showInlinePreview() bool {
+	return m.options.ShowPreview
+}
 
-	for _, entry := range entries {
-		for _, tag := range entry.Tags {
-			tag = strings.TrimSpace(strings.ToLower(tag))
-			if tag == "" {
-				continue
-			}
-			if _, ok := seen[tag]; ok {
-				continue
-			}
-			seen[tag] = struct{}{}
-			collected = append(collected, tag)
-		}
+func (m PickerModel) resultRowHeight() int {
+	if m.showInlinePreview() {
+		return 2
 	}
-
-	sort.Strings(collected)
-	return append(tags, collected...)
+	return 1
 }
 
 func (m PickerModel) statusLine() string {
-	total := len(m.filteredEntries())
-	matches := len(m.matches)
-	active := m.activeTag()
-	if active == notes.TypeAll {
-		active = "all"
+	status := fmt.Sprintf("%d/%d", len(m.matches), len(m.entries))
+	if len(m.matches) == 0 {
+		return status
 	}
-	return fmt.Sprintf("%d/%d  tag:%s", matches, total, active)
+	if m.showInlinePreview() {
+		if hits := m.currentPreviewHitCount(); hits > 1 {
+			return fmt.Sprintf("%s  hit %d/%d", status, m.activePreviewHit()+1, hits)
+		}
+	}
+	return status
+}
+
+func pickerHelpText() string {
+	return string([]rune{0x2191, 0x2193}) + " select  " +
+		string([]rune{0x2190, 0x2192}) + " hit  enter open  ctrl+n new  ctrl+e edit  esc quit"
 }
 
 func wrapText(value string, width int) []string {
@@ -558,7 +532,7 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 		return []string{detailStyle.Render("No matches")}
 	}
 
-	lines := make([]string, 0, len(m.visibleMatches())*5)
+	lines := make([]string, 0, len(m.visibleMatches())*maxInt(2, m.resultRowHeight()))
 	visible := m.visibleMatches()
 	for i, match := range visible {
 		index := i + m.offset()
@@ -576,16 +550,15 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 		}
 		lines = append(lines, prefix+renderedLabel)
 
-		snippet := truncateRunes(match.Detail, maxInt(12, width-4))
-		if index == m.cursor {
-			preview := m.cachedPreview(entry)
-			if selectedSnippet := m.inlinePreviewLine(preview, width-4); selectedSnippet != "" {
-				snippet = selectedSnippet
+		if m.showInlinePreview() {
+			snippet := truncateRunes(match.Detail, maxInt(12, width-4))
+			if index == m.cursor {
+				preview := m.cachedPreview(entry)
+				if selectedSnippet := m.inlinePreviewLine(preview, width-4, m.activePreviewHit()); selectedSnippet != "" {
+					snippet = selectedSnippet
+				}
 			}
-		}
-		lines = append(lines, "    "+snippet)
-		if index == m.cursor {
-			lines = append(lines, m.contextInlineLines(entry, width)...)
+			lines = append(lines, "    "+snippet)
 		}
 	}
 	return lines
@@ -615,36 +588,16 @@ func (m *PickerModel) cachedPreview(entry notes.Entry) notes.PreviewMatch {
 	return preview
 }
 
-func (m PickerModel) inlinePreviewLine(preview notes.PreviewMatch, width int) string {
-	lines := previewPaneLines(preview, maxInt(12, width), 1, 0, m.theme)
+func (m PickerModel) inlinePreviewLine(preview notes.PreviewMatch, width, activeIndex int) string {
+	lines := previewPaneLines(preview, maxInt(12, width), 1, activeIndex, m.theme)
 	if len(lines) == 0 {
 		return ""
 	}
 	return lines[0]
 }
 
-func (m PickerModel) contextInlineLines(entry notes.Entry, totalWidth int) []string {
-	if entry.HasCmd() && !entry.HasShow() && len(m.preview.Snippets) == 0 {
-		return nil
-	}
-
-	width := totalWidth - 8
-	if width < 24 {
-		width = 24
-	}
-	lines := popupPreviewLines(m.preview, width, 3, m.activePreviewHit(), m.theme)
-	if len(lines) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(lines)+1)
-	out = append(out, "")
-	for _, line := range lines {
-		out = append(out, "      "+line)
-	}
-	return out
-}
-
 func previewCacheKey(entry notes.Entry, query string) string {
 	return entry.SourcePath + "|" + entry.Desc + "|" + query
 }
+
+

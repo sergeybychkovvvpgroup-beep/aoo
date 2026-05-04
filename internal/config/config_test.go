@@ -74,17 +74,17 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if cfg.PickerHeight != 14 {
 		t.Fatalf("expected default picker height 14, got %d", cfg.PickerHeight)
 	}
-	if cfg.PreviewWidth != 52 {
-		t.Fatalf("expected default preview width 52, got %d", cfg.PreviewWidth)
+	if cfg.Theme != "fzf-dark" {
+		t.Fatalf("expected default theme fzf-dark, got %q", cfg.Theme)
+	}
+	if cfg.Layout != "bottom" {
+		t.Fatalf("expected default layout bottom, got %q", cfg.Layout)
 	}
 	if !cfg.FullScreen {
 		t.Fatal("expected full screen default to be true")
 	}
 	if cfg.ShowPreview {
 		t.Fatal("expected show preview default to be false")
-	}
-	if cfg.PreviewPane {
-		t.Fatal("expected preview pane default to be false")
 	}
 
 	path, err := ConfigPath()
@@ -96,22 +96,19 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	if !strings.Contains(text, "# aoo config") {
-		t.Fatalf("expected commented config template, got %q", text)
+	if !strings.Contains(text, "# themes: fzf-dark, catppuccin-mocha, catppuccin-latte, dracula, nord, solarized-dark, solarized-light") {
+		t.Fatalf("expected compact theme list in config, got %q", text)
 	}
-	if !strings.Contains(text, "picker_height: 14") {
-		t.Fatalf("expected picker height in config, got %q", text)
+	if !strings.Contains(text, "theme: fzf-dark") {
+		t.Fatalf("expected default theme in config, got %q", text)
 	}
-	if !strings.Contains(text, "preview_width: 52") {
-		t.Fatalf("expected preview width in config, got %q", text)
+	if !strings.Contains(text, "layout: bottom") {
+		t.Fatalf("expected default layout in config, got %q", text)
 	}
 	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
 	}
 	if !strings.Contains(text, "show_preview: false") {
 		t.Fatalf("expected show preview in config, got %q", text)
-	}
-	if !strings.Contains(text, "preview_pane: false") {
-		t.Fatalf("expected preview pane in config, got %q", text)
 	}
 }

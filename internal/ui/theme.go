@@ -38,7 +38,6 @@ func ResolveTheme(name string) (Theme, error) {
 
 func ThemeNames() []string {
 	return []string{
-		"auto",
 		"fzf-dark",
 		"catppuccin-mocha",
 		"catppuccin-latte",

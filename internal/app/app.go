@@ -96,11 +96,10 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	}
 
 	uiOptions := ui.Options{
-		FullScreen:   cfg.FullScreen,
-		Height:       cfg.PickerHeight,
-		PreviewWidth: cfg.PreviewWidth,
-		ShowPreview:  cfg.ShowPreview,
-		PreviewPane:  cfg.PreviewPane,
+		FullScreen:  cfg.FullScreen,
+		Height:      cfg.PickerHeight,
+		ShowPreview: cfg.ShowPreview,
+		Layout:      cfg.Layout,
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -370,11 +369,10 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "theme: %s\n", emptyIfUnset(cfg.Theme))
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
+	fmt.Fprintf(stdout, "layout: %s\n", cfg.Layout)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
-	fmt.Fprintf(stdout, "preview_width: %d\n", cfg.PreviewWidth)
 	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
-	fmt.Fprintf(stdout, "preview_pane: %t\n", cfg.PreviewPane)
 	return nil
 }
 

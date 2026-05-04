@@ -174,6 +174,36 @@ func TestFilterPreviewBuildsMultipleSnippets(t *testing.T) {
 	}
 }
 
+func TestFilterPreviewDoesNotCapSnippetCountAtTwelve(t *testing.T) {
+	entry := Entry{
+		Desc: "router dhcp",
+		Actions: []Action{{
+			Desc: "show",
+			Text: strings.Join([]string{
+				"static-map-01",
+				"static-map-02",
+				"static-map-03",
+				"static-map-04",
+				"static-map-05",
+				"static-map-06",
+				"static-map-07",
+				"static-map-08",
+				"static-map-09",
+				"static-map-10",
+				"static-map-11",
+				"static-map-12",
+				"static-map-13",
+				"static-map-14",
+			}, "\n"),
+		}},
+	}
+
+	preview := BuildPreview(entry, "static-map")
+	if len(preview.Snippets) != 14 {
+		t.Fatalf("expected 14 preview snippets, got %d", len(preview.Snippets))
+	}
+}
+
 func TestFilterPreviewPrioritizesLinesMatchingAllTerms(t *testing.T) {
 	entry := Entry{
 		Desc: "router cha",

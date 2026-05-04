@@ -58,3 +58,25 @@ func TestPreviewExcerptKeepsHorizontalWindowAroundMatch(t *testing.T) {
 		t.Fatalf("expected second line to show next full related line, got %q", lines[1].text)
 	}
 }
+
+func TestPreviewSingleLineShowsMatchedLineInsteadOfEllipsis(t *testing.T) {
+	preview := notes.PreviewMatch{
+		Section: "show",
+		Snippets: []notes.PreviewSnippet{{
+			Section: "show",
+			Text: strings.Join([]string{
+				"set protocols static route 0.0.0.0/0 next-hop 1.1.1.1",
+				"set service dhcp-server subnet 10.120.0.0/16 static-mapping vyos-lan ip-address '10.120.0.5'",
+			}, "\n"),
+			Occurrence: notes.Occurrence{Start: 94, End: 108},
+		}},
+	}
+
+	lines := previewPaneLines(preview, 60, 1, 0, Theme{})
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	if strings.TrimSpace(lines[0]) == "" || strings.Contains(lines[0], "вЂ¦") && strings.TrimSpace(lines[0]) == "вЂ¦" {
+		t.Fatalf("expected matched content instead of plain ellipsis, got %q", lines[0])
+	}
+}
