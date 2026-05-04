@@ -576,6 +576,9 @@ func resultBadge(entry notes.Entry) string {
 }
 
 func (m *PickerModel) cachedPreview(entry notes.Entry) notes.PreviewMatch {
+	if m.previewCache == nil {
+		m.previewCache = make(map[string]notes.PreviewMatch)
+	}
 	key := previewCacheKey(entry, m.input.Value())
 	if preview, ok := m.previewCache[key]; ok {
 		return preview
