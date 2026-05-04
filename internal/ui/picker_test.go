@@ -67,6 +67,7 @@ func TestStatusLineShowsActiveHitIndexWhenMultiplePreviewHitsExist(t *testing.T)
 	}
 
 	model := PickerModel{
+		input: textInputWithValue("static"),
 		entries: []notes.Entry{entry},
 		matches: []notes.Match{{
 			Entry:  entry,
@@ -74,6 +75,7 @@ func TestStatusLineShowsActiveHitIndexWhenMultiplePreviewHitsExist(t *testing.T)
 			Detail: entry.DisplayValue(),
 		}},
 		previewHit: 1,
+		options:    Options{ShowPreview: true},
 	}
 	model.preview = notes.BuildPreview(entry, "static")
 
@@ -118,6 +120,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForSelectedEntry(t *testin
 	}
 
 	model := PickerModel{
+		input: textInputWithValue("start"),
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
@@ -150,6 +153,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForCmdOnlyEntry(t *testing
 	}
 
 	model := PickerModel{
+		input: textInputWithValue("git"),
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
@@ -183,6 +187,7 @@ func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {
 	}
 
 	model := PickerModel{
+		input: textInputWithValue("static"),
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
@@ -219,6 +224,7 @@ func TestSelectedTemplatePreviewDoesNotDuplicateTemplatePrefix(t *testing.T) {
 	}
 
 	model := PickerModel{
+		input: textInputWithValue("push"),
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
