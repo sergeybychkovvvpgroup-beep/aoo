@@ -28,7 +28,7 @@ func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 				}},
 			},
 			Label:  "router dhcp",
-			Detail: "SHOW | static-map",
+			Detail: "static-map",
 		}},
 		height:  8,
 		width:   80,
@@ -71,7 +71,7 @@ func TestStatusLineShowsActiveHitIndexWhenMultiplePreviewHitsExist(t *testing.T)
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
-			Detail: entry.Action() + " | " + entry.DisplayValue(),
+			Detail: entry.DisplayValue(),
 		}},
 		previewHit: 1,
 	}
@@ -96,7 +96,7 @@ func TestStatusLineHidesHitIndexWhenPreviewLineIsDisabled(t *testing.T) {
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
-			Detail: entry.Action() + " | " + entry.DisplayValue(),
+			Detail: entry.DisplayValue(),
 		}},
 		previewHit: 1,
 		options:    Options{ShowPreview: false},
@@ -121,7 +121,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForSelectedEntry(t *testin
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
-			Detail: entry.Action() + " | " + entry.DisplayValue(),
+			Detail: entry.DisplayValue(),
 		}},
 		cursor:  0,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
@@ -153,7 +153,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForCmdOnlyEntry(t *testing
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
-			Detail: entry.Action() + " | " + entry.DisplayValue(),
+			Detail: entry.DisplayValue(),
 		}},
 		cursor:  0,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
@@ -186,7 +186,7 @@ func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {
 		matches: []notes.Match{{
 			Entry:  entry,
 			Label:  entry.Desc,
-			Detail: entry.Action() + " | " + entry.DisplayValue(),
+			Detail: entry.DisplayValue(),
 		}},
 		cursor:     0,
 		previewHit: 1,
@@ -209,9 +209,45 @@ func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {
 	}
 }
 
+func TestSelectedTemplatePreviewDoesNotDuplicateTemplatePrefix(t *testing.T) {
+	entry := notes.Entry{
+		Desc: "aoo notes git add commit push",
+		Actions: []notes.Action{{
+			Desc:     "run",
+			Template: `git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m "{{message}}" && git -C {{aoo_notes_dir}} push`,
+		}},
+	}
+
+	model := PickerModel{
+		matches: []notes.Match{{
+			Entry:  entry,
+			Label:  entry.Desc,
+			Detail: entry.DisplayValue(),
+		}},
+		cursor:  0,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
+		options: Options{ShowPreview: true},
+	}
+	model.preview = notes.BuildPreview(entry, "push")
+
+	lines := model.resultLines(
+		120,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+	)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %#v", len(lines), lines)
+	}
+	if strings.Contains(lines[1], "TEMPLATE |") {
+		t.Fatalf("expected selected preview without duplicated TEMPLATE prefix, got %q", lines[1])
+	}
+}
+
 func textInputWithValue(value string) textinput.Model {
 	input := textinput.New()
 	input.Prompt = "notes> "
 	input.SetValue(value)
 	return input
 }
+

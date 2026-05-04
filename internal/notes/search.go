@@ -287,7 +287,7 @@ func normalize(value string) string {
 }
 
 func formatDetail(entry Entry) string {
-	return entry.Action() + " | " + entry.DisplayValue()
+	return entry.DisplayValue()
 }
 
 func normalizeNumericToken(value string) string {
