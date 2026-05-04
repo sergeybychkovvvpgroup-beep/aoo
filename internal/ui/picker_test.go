@@ -174,6 +174,12 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForCmdOnlyEntry(t *testing
 	if len(lines) != 2 {
 		t.Fatalf("expected cmd-only entry to render as 2 lines, got %d: %#v", len(lines), lines)
 	}
+	if !strings.Contains(lines[1], "git add . && git commit") {
+		t.Fatalf("expected selected cmd preview to stay on command text, got %q", lines[1])
+	}
+	if strings.Contains(lines[1], entry.Desc) {
+		t.Fatalf("expected selected cmd preview not to switch to description, got %q", lines[1])
+	}
 }
 
 func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {

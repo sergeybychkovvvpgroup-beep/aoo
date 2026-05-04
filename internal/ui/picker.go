@@ -552,7 +552,7 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 
 		if m.showInlinePreview() {
 			snippet := truncateRunes(match.Detail, maxInt(12, width-4))
-			if index == m.cursor {
+			if index == m.cursor && !entry.HasCmd() && !entry.IsTemplate() {
 				preview := m.cachedPreview(entry)
 				if selectedSnippet := m.inlinePreviewLine(preview, width-4, m.activePreviewHit()); selectedSnippet != "" {
 					snippet = selectedSnippet
