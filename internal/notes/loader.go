@@ -53,7 +53,7 @@ func LoadDir(root string) LoadResult {
 			return nil
 		}
 
-		if !isYAMLFile(path) {
+		if !isSupportedNoteFile(path) {
 			return nil
 		}
 
@@ -89,7 +89,7 @@ func LoadDir(root string) LoadResult {
 func LoadBytes(path string, raw []byte) LoadResult {
 	var result LoadResult
 
-	entries, err := loadYAML(path, raw)
+	entries, err := loadStructuredBytes(path, raw)
 	if err != nil {
 		result.Errors = append(result.Errors, err)
 		return result
@@ -108,7 +108,20 @@ func loadFile(path string) ([]Entry, error) {
 		return nil, err
 	}
 
-	return loadYAML(path, raw)
+	return loadStructuredBytes(path, raw)
+}
+
+func loadStructuredBytes(path string, raw []byte) ([]Entry, error) {
+	if isYAMLFile(path) {
+		noteLike, detectErr := looksLikeNoteYAML(raw)
+		if detectErr != nil {
+			return nil, ValidationError{Path: path, Problem: detectErr.Error()}
+		}
+		if noteLike {
+			return loadYAML(path, raw)
+		}
+	}
+	return loadRawFile(path, raw)
 }
 
 func loadYAML(path string, raw []byte) ([]Entry, error) {
@@ -145,6 +158,9 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 				Problem: fmt.Sprintf("note at line %d must be a YAML object", node.Line),
 			}
 		}
+		if err := validateEntryFields(path, node); err != nil {
+			return nil, err
+		}
 
 		var entry Entry
 		if err := node.Decode(&entry); err != nil {
@@ -162,12 +178,85 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 		entry.SourcePath = path
 		entry.SourceFile = filepath.Base(path)
 		entry.SourceLine = node.Line
-		entry.Tags = normalizedTags(entry.Tags, entry.SourceFile)
+		entry.SourceKind = SourceKindNote
 		entry.searchData = weightedFields(entry)
 		entries = append(entries, entry)
 	}
 
 	return entries, nil
+}
+
+func validateEntryFields(path string, node *yaml.Node) error {
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		valueNode := node.Content[i+1]
+		key := strings.TrimSpace(strings.ToLower(keyNode.Value))
+		if !isNoteField(key) {
+			return ValidationError{
+				Path:    path,
+				Problem: fmt.Sprintf("note at line %d uses unsupported field %q", keyNode.Line, keyNode.Value),
+			}
+		}
+		switch key {
+		case "actions":
+			if err := validateActionNodes(path, valueNode); err != nil {
+				return err
+			}
+		case "run":
+			if err := validateRunNodes(path, valueNode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateActionNodes(path string, node *yaml.Node) error {
+	if node == nil || node.Kind != yaml.SequenceNode {
+		return nil
+	}
+	for _, item := range node.Content {
+		if item.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i+1 < len(item.Content); i += 2 {
+			keyNode := item.Content[i]
+			key := strings.TrimSpace(strings.ToLower(keyNode.Value))
+			switch key {
+			case "desc", "cmd", "text", "banner":
+			default:
+				return ValidationError{
+					Path:    path,
+					Problem: fmt.Sprintf("action at line %d uses unsupported field %q", keyNode.Line, keyNode.Value),
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateRunNodes(path string, node *yaml.Node) error {
+	if node == nil || node.Kind != yaml.SequenceNode {
+		return nil
+	}
+	for _, item := range node.Content {
+		if item.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i+1 < len(item.Content); i += 2 {
+			keyNode := item.Content[i]
+			key := strings.TrimSpace(strings.ToLower(keyNode.Value))
+			switch key {
+			case "desc", "run", "banner":
+			default:
+				return ValidationError{
+					Path:    path,
+					Problem: fmt.Sprintf("run option at line %d uses unsupported field %q", keyNode.Line, keyNode.Value),
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func validateEntry(path string, line int, entry Entry) error {
@@ -202,19 +291,16 @@ func validateEntry(path string, line int, entry Entry) error {
 		if action.IsCmd() {
 			kinds++
 		}
-		if action.IsTemplate() {
-			kinds++
-		}
 		if kinds == 0 {
 			return ValidationError{
 				Path:    path,
-				Problem: fmt.Sprintf("note in %s action %d at line %d must have text, cmd, or template", filepath.Base(path), i+1, actionLine),
+				Problem: fmt.Sprintf("note in %s action %d at line %d must have text or cmd", filepath.Base(path), i+1, actionLine),
 			}
 		}
 		if kinds > 1 {
 			return ValidationError{
 				Path:    path,
-				Problem: fmt.Sprintf("note in %s action %d at line %d must use only one of text, cmd, or template", filepath.Base(path), i+1, actionLine),
+				Problem: fmt.Sprintf("note in %s action %d at line %d must use only one of text or cmd", filepath.Base(path), i+1, actionLine),
 			}
 		}
 	}
@@ -251,7 +337,6 @@ func normalizeLegacyEntry(entry Entry) Entry {
 			entry.Actions[i].Desc = strings.TrimSpace(entry.Actions[i].Desc)
 			entry.Actions[i].Cmd = strings.TrimSpace(entry.Actions[i].Cmd)
 			entry.Actions[i].Text = strings.TrimSpace(entry.Actions[i].Text)
-			entry.Actions[i].Template = strings.TrimSpace(entry.Actions[i].Template)
 			entry.Actions[i].Banner = strings.TrimSpace(entry.Actions[i].Banner)
 			normalized = append(normalized, entry.Actions[i])
 		}
@@ -266,6 +351,7 @@ func normalizeLegacyEntry(entry Entry) Entry {
 	entry.Text = strings.TrimSpace(entry.Text)
 	entry.Cmd = strings.TrimSpace(entry.Cmd)
 	legacyDesc := strings.TrimSpace(entry.Desc)
+	entry.Lite = true
 	if entry.ActionCmd != "" {
 		actions = append(actions, Action{
 			Cmd:    entry.ActionCmd,
@@ -306,15 +392,12 @@ func normalizeLegacyEntry(entry Entry) Entry {
 			Banner: banner,
 		})
 	}
-	if template := strings.TrimSpace(entry.Template); template != "" {
-		actions = append(actions, Action{
-			Desc:     legacyActionDesc(legacyDesc, inferActionDesc(template, "run")),
-			Template: template,
-			Args:     entry.Args,
-			Banner:   strings.TrimSpace(entry.Banner),
-		})
-	}
 	entry.Actions = actions
+	entry.ActionCmd = ""
+	entry.Text = ""
+	entry.Note = ""
+	entry.Cmd = ""
+	entry.Run = nil
 	return entry
 }
 
@@ -372,36 +455,114 @@ func inferActionDesc(command string, fallback string) string {
 	}
 }
 
+func isSupportedNoteFile(path string) bool {
+	if isYAMLFile(path) {
+		return true
+	}
+	return isRawTextExtension(path)
+}
+
 func isYAMLFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".yaml" || ext == ".yml"
 }
 
-func normalizedTags(tags []string, sourceFile string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(tags)+4)
+func isRawTextExtension(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".txt", ".md", ".conf", ".cfg", ".ini", ".json", ".toml", ".env", ".py", ".sh", ".bash", ".zsh", ".vyos", ".service":
+		return true
+	default:
+		return false
+	}
+}
 
-	appendTag := func(tag string) {
-		tag = strings.TrimSpace(strings.ToLower(tag))
-		if tag == "" {
-			return
+func looksLikeNoteYAML(raw []byte) (bool, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return false, err
+	}
+	if len(doc.Content) == 0 {
+		return false, nil
+	}
+
+	return nodeLooksLikeNoteDoc(doc.Content[0]), nil
+}
+
+func nodeLooksLikeNoteDoc(root *yaml.Node) bool {
+	switch root.Kind {
+	case yaml.SequenceNode:
+		if len(root.Content) == 0 {
+			return false
 		}
-		if _, exists := seen[tag]; exists {
-			return
+		for _, node := range root.Content {
+			if node.Kind != yaml.MappingNode {
+				return false
+			}
+			if !mappingLooksLikeNote(node) {
+				return false
+			}
 		}
-		seen[tag] = struct{}{}
-		out = append(out, tag)
+		return true
+	case yaml.MappingNode:
+		return mappingLooksLikeNote(root)
+	default:
+		return false
+	}
+}
+
+func mappingLooksLikeNote(node *yaml.Node) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := strings.TrimSpace(strings.ToLower(node.Content[i].Value))
+		if isNoteField(key) {
+			return true
+		}
+	}
+	return false
+}
+
+func isNoteField(key string) bool {
+	switch key {
+	case "desc", "action", "text", "cmd", "mode", "actions", "run", "note", "banner":
+		return true
+	default:
+		return false
+	}
+}
+
+func loadRawFile(path string, raw []byte) ([]Entry, error) {
+	if isBinaryContent(raw) {
+		return nil, nil
 	}
 
-	for _, tag := range tags {
-		appendTag(tag)
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	entry := Entry{
+		Desc:       displayNameFromFile(filepath.Base(path)),
+		Actions:    []Action{{Desc: sourceActionLabel(path), Text: text}},
+		SourcePath: path,
+		SourceFile: filepath.Base(path),
+		SourceLine: 1,
+		SourceKind: SourceKindRaw,
 	}
+	entry.searchData = weightedFields(entry)
+	return []Entry{entry}, nil
+}
 
-	base := strings.TrimSuffix(sourceFile, filepath.Ext(sourceFile))
-	replacer := strings.NewReplacer("-", " ", "_", " ", ".", " ")
-	for _, token := range strings.Fields(replacer.Replace(strings.ToLower(base))) {
-		appendTag(token)
+func sourceActionLabel(path string) string {
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
+	if ext == "" {
+		return SourceKindRaw
 	}
+	return ext
+}
 
-	return out
+func isBinaryContent(raw []byte) bool {
+	for _, b := range raw {
+		if b == 0 {
+			return true
+		}
+	}
+	return false
 }

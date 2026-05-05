@@ -80,9 +80,6 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if cfg.Layout != "bottom" {
 		t.Fatalf("expected default layout bottom, got %q", cfg.Layout)
 	}
-	if cfg.SearchMode != "hybrid" {
-		t.Fatalf("expected default search mode hybrid, got %q", cfg.SearchMode)
-	}
 	if !cfg.FullScreen {
 		t.Fatal("expected full screen default to be true")
 	}
@@ -108,8 +105,8 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "layout: bottom") {
 		t.Fatalf("expected default layout in config, got %q", text)
 	}
-	if !strings.Contains(text, "search_mode: hybrid") {
-		t.Fatalf("expected default search mode in config, got %q", text)
+	if strings.Contains(text, "search_mode:") {
+		t.Fatalf("expected config without search_mode, got %q", text)
 	}
 	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
@@ -119,7 +116,7 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadBackfillsMissingSearchModeIntoConfigFile(t *testing.T) {
+func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 
@@ -148,15 +145,15 @@ func TestLoadBackfillsMissingSearchModeIntoConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SearchMode != "hybrid" {
-		t.Fatalf("expected hybrid search mode after backfill, got %q", cfg.SearchMode)
+	if cfg.Layout != "bottom" {
+		t.Fatalf("expected bottom layout, got %q", cfg.Layout)
 	}
 
 	updated, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(updated), "search_mode: hybrid") {
-		t.Fatalf("expected config file to be backfilled with search_mode, got %q", string(updated))
+	if strings.Contains(string(updated), "search_mode:") {
+		t.Fatalf("expected config file without search_mode, got %q", string(updated))
 	}
 }

@@ -1,10 +1,2 @@
 - desc: curl check url headers
-  tags:
-    - template
-    - curl
-    - http
-  template: curl -kI {{url}}
-  args:
-    - name: url
-      prompt: URL
-      example: https://example.local:8443
+  cmd: curl -kI https://example.local:8443

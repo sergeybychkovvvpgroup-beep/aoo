@@ -20,6 +20,10 @@ type Theme struct {
 	RowFG        string
 	DividerFG    string
 	SelectedMark string
+	StatusOKFG   string
+	StatusWarnFG string
+	StatusErrFG  string
+	StatusRunFG  string
 }
 
 func ResolveTheme(name string) (Theme, error) {
@@ -64,6 +68,10 @@ var themes = map[string]Theme{
 		RowFG:        "#c8c8c8",
 		DividerFG:    "#3a3a3a",
 		SelectedMark: ">",
+		StatusOKFG:   "#87d787",
+		StatusWarnFG: "#e5c07b",
+		StatusErrFG:  "#ff6c6b",
+		StatusRunFG:  "#61afef",
 	},
 	"catppuccin-mocha": {
 		Name:         "catppuccin-mocha",
@@ -80,6 +88,10 @@ var themes = map[string]Theme{
 		RowFG:        "#bac2de",
 		DividerFG:    "#313244",
 		SelectedMark: "›",
+		StatusOKFG:   "#a6e3a1",
+		StatusWarnFG: "#f9e2af",
+		StatusErrFG:  "#f38ba8",
+		StatusRunFG:  "#89b4fa",
 	},
 	"catppuccin-latte": {
 		Name:         "catppuccin-latte",
@@ -96,6 +108,10 @@ var themes = map[string]Theme{
 		RowFG:        "#5c5f77",
 		DividerFG:    "#dce0e8",
 		SelectedMark: "›",
+		StatusOKFG:   "#40a02b",
+		StatusWarnFG: "#df8e1d",
+		StatusErrFG:  "#d20f39",
+		StatusRunFG:  "#1e66f5",
 	},
 	"dracula": {
 		Name:         "dracula",
@@ -112,6 +128,10 @@ var themes = map[string]Theme{
 		RowFG:        "#e9e9f4",
 		DividerFG:    "#44475a",
 		SelectedMark: "›",
+		StatusOKFG:   "#50fa7b",
+		StatusWarnFG: "#f1fa8c",
+		StatusErrFG:  "#ff5555",
+		StatusRunFG:  "#8be9fd",
 	},
 	"nord": {
 		Name:         "nord",
@@ -128,6 +148,10 @@ var themes = map[string]Theme{
 		RowFG:        "#e5e9f0",
 		DividerFG:    "#3b4252",
 		SelectedMark: "›",
+		StatusOKFG:   "#a3be8c",
+		StatusWarnFG: "#ebcb8b",
+		StatusErrFG:  "#bf616a",
+		StatusRunFG:  "#88c0d0",
 	},
 	"solarized-dark": {
 		Name:         "solarized-dark",
@@ -144,6 +168,10 @@ var themes = map[string]Theme{
 		RowFG:        "#93a1a1",
 		DividerFG:    "#0f414f",
 		SelectedMark: "›",
+		StatusOKFG:   "#859900",
+		StatusWarnFG: "#b58900",
+		StatusErrFG:  "#dc322f",
+		StatusRunFG:  "#268bd2",
 	},
 	"solarized-light": {
 		Name:         "solarized-light",
@@ -160,5 +188,9 @@ var themes = map[string]Theme{
 		RowFG:        "#586e75",
 		DividerFG:    "#eee8d5",
 		SelectedMark: "›",
+		StatusOKFG:   "#859900",
+		StatusWarnFG: "#b58900",
+		StatusErrFG:  "#dc322f",
+		StatusRunFG:  "#268bd2",
 	},
 }

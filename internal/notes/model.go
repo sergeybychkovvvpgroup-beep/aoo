@@ -9,21 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Arg struct {
-	Name        string `yaml:"name"`
-	Prompt      string `yaml:"prompt"`
-	Default     string `yaml:"default"`
-	Example     string `yaml:"example"`
-	Description string `yaml:"description"`
-}
-
 type Action struct {
-	Desc     string `yaml:"desc"`
-	Cmd      string `yaml:"cmd"`
-	Text     string `yaml:"text"`
-	Template string `yaml:"template"`
-	Args     []Arg  `yaml:"args"`
-	Banner   string `yaml:"banner"`
+	Desc   string `yaml:"desc"`
+	Cmd    string `yaml:"cmd"`
+	Text   string `yaml:"text"`
+	Banner string `yaml:"banner"`
 }
 
 func (a Action) IsShow() bool {
@@ -34,18 +24,12 @@ func (a Action) IsCmd() bool {
 	return strings.TrimSpace(a.Cmd) != ""
 }
 
-func (a Action) IsTemplate() bool {
-	return strings.TrimSpace(a.Template) != ""
-}
-
 func (a Action) DisplayValue() string {
 	switch {
 	case a.IsShow():
 		return oneLine(a.Text, 90)
 	case a.IsCmd():
 		return oneLine(a.Cmd, 90)
-	case a.IsTemplate():
-		return oneLine(a.Template, 90)
 	default:
 		return ""
 	}
@@ -114,26 +98,30 @@ func (r *RunCommands) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type Entry struct {
-	Desc         string      `yaml:"desc"`
-	ActionCmd    string      `yaml:"action"`
-	Text         string      `yaml:"text"`
-	Cmd          string      `yaml:"cmd"`
-	Mode         string      `yaml:"mode"`
-	Actions      []Action    `yaml:"actions"`
-	Run          RunCommands `yaml:"run"`
-	Template     string      `yaml:"template"`
-	Args         []Arg       `yaml:"args"`
-	Note         string      `yaml:"note"`
-	Banner       string      `yaml:"banner"`
-	Tags         []string    `yaml:"tags"`
-	SourcePath   string      `yaml:"-"`
-	SourceFile   string      `yaml:"-"`
-	SourceLine   int         `yaml:"-"`
-	GroupEntries []Entry     `yaml:"-"`
-	GroupSummary string      `yaml:"-"`
-	searchData []weightedField `yaml:"-"`
-	index      int
+	Desc         string          `yaml:"desc"`
+	ActionCmd    string          `yaml:"action"`
+	Text         string          `yaml:"text"`
+	Cmd          string          `yaml:"cmd"`
+	Mode         string          `yaml:"mode"`
+	Actions      []Action        `yaml:"actions"`
+	Run          RunCommands     `yaml:"run"`
+	Note         string          `yaml:"note"`
+	Banner       string          `yaml:"banner"`
+	SourcePath   string          `yaml:"-"`
+	SourceFile   string          `yaml:"-"`
+	SourceLine   int             `yaml:"-"`
+	SourceKind   string          `yaml:"-"`
+	Lite         bool            `yaml:"-"`
+	GroupEntries []Entry         `yaml:"-"`
+	GroupSummary string          `yaml:"-"`
+	searchData   []weightedField `yaml:"-"`
+	index        int
 }
+
+const (
+	SourceKindNote = "note"
+	SourceKindRaw  = "raw"
+)
 
 func (e Entry) IsGroup() bool {
 	return len(e.GroupEntries) > 0
@@ -193,6 +181,21 @@ func (e Entry) HasShow() bool {
 	return false
 }
 
+func (e Entry) IsRaw() bool {
+	return strings.TrimSpace(e.SourceKind) == SourceKindRaw
+}
+
+func (e Entry) SourceBadge() string {
+	if !e.IsRaw() {
+		return "note"
+	}
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(strings.TrimSpace(e.SourceFile))), ".")
+	if ext != "" {
+		return ext
+	}
+	return SourceKindRaw
+}
+
 func (e Entry) HasNote() bool {
 	return strings.TrimSpace(e.Note) != "" || e.HasShow()
 }
@@ -208,19 +211,6 @@ func (e Entry) HasCmd() bool {
 
 func (e Entry) IsRun() bool {
 	return e.HasCmd()
-}
-
-func (e Entry) HasTemplate() bool {
-	for _, action := range e.normalizedActions() {
-		if action.IsTemplate() {
-			return true
-		}
-	}
-	return false
-}
-
-func (e Entry) IsTemplate() bool {
-	return e.HasTemplate()
 }
 
 func (e Entry) ActionCount() int {
@@ -300,8 +290,6 @@ func (e Entry) Action() string {
 			return "RUN"
 		case strings.TrimSpace(e.Cmd) != "":
 			return "RUN"
-		case strings.TrimSpace(e.Template) != "":
-			return "TEMPLATE"
 		case strings.TrimSpace(e.Text) != "":
 			return "SHOW"
 		}
@@ -318,9 +306,6 @@ func (e Entry) Action() string {
 		} else {
 			parts = append(parts, fmt.Sprintf("RUN x%d", cmdCount))
 		}
-	}
-	if e.HasTemplate() {
-		parts = append(parts, "TEMPLATE")
 	}
 	if len(parts) == 0 {
 		return TypeAll
@@ -342,8 +327,6 @@ func (e Entry) DisplayValue() string {
 			return oneLine(e.ActionCmd, 90)
 		case strings.TrimSpace(e.Cmd) != "":
 			return oneLine(e.Cmd, 90)
-		case strings.TrimSpace(e.Template) != "":
-			return oneLine(e.Template, 90)
 		case strings.TrimSpace(e.Text) != "":
 			return oneLine(e.Text, 90)
 		}
@@ -374,12 +357,8 @@ func (e Entry) SearchFields() []string {
 		fields = append(fields, e.GroupSummary)
 	}
 	for _, action := range e.normalizedActions() {
-		fields = append(fields, action.Desc, action.Cmd, action.Text, action.Template, action.Banner)
-		for _, arg := range action.Args {
-			fields = append(fields, arg.Name, arg.Prompt, arg.Default, arg.Example, arg.Description)
-		}
+		fields = append(fields, action.Desc, action.Cmd, action.Text, action.Banner)
 	}
-	fields = append(fields, e.Tags...)
 	return fields
 }
 
@@ -404,7 +383,10 @@ func (e Entry) IsLite() bool {
 	if e.IsGroup() {
 		return false
 	}
-	return strings.TrimSpace(e.Text) != "" || strings.TrimSpace(e.Note) != "" || strings.TrimSpace(e.ActionCmd) != "" || strings.TrimSpace(e.Cmd) != "" || strings.TrimSpace(e.Template) != ""
+	if e.Lite {
+		return true
+	}
+	return strings.TrimSpace(e.Text) != "" || strings.TrimSpace(e.Note) != "" || strings.TrimSpace(e.ActionCmd) != "" || strings.TrimSpace(e.Cmd) != ""
 }
 
 func (e Entry) QuickAction() *Action {
@@ -416,6 +398,17 @@ func (e Entry) QuickAction() *Action {
 		return nil
 	}
 	if e.IsLite() {
+		actions := e.normalizedActions()
+		for i := range actions {
+			if actions[i].IsCmd() {
+				return &actions[i]
+			}
+		}
+		for i := range actions {
+			if actions[i].IsShow() {
+				return &actions[i]
+			}
+		}
 		switch {
 		case strings.TrimSpace(e.ActionCmd) != "":
 			return &Action{
@@ -427,13 +420,6 @@ func (e Entry) QuickAction() *Action {
 				Desc:   legacyEntryActionDesc(e, inferActionDesc(e.Cmd, "run")),
 				Cmd:    strings.TrimSpace(e.Cmd),
 				Banner: strings.TrimSpace(e.Banner),
-			}
-		case strings.TrimSpace(e.Template) != "":
-			return &Action{
-				Desc:     legacyEntryActionDesc(e, inferActionDesc(e.Template, "run")),
-				Template: strings.TrimSpace(e.Template),
-				Args:     e.Args,
-				Banner:   strings.TrimSpace(e.Banner),
 			}
 		case strings.TrimSpace(e.Text) != "":
 			return &Action{
@@ -513,14 +499,6 @@ func (e Entry) normalizedActions() []Action {
 			Desc:   desc,
 			Cmd:    strings.TrimSpace(option.Run),
 			Banner: banner,
-		})
-	}
-	if template := strings.TrimSpace(e.Template); template != "" {
-		actions = append(actions, Action{
-			Desc:     legacyEntryActionDesc(e, inferActionDesc(template, "template")),
-			Template: template,
-			Args:     e.Args,
-			Banner:   strings.TrimSpace(e.Banner),
 		})
 	}
 	return actions

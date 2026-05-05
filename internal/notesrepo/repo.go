@@ -130,6 +130,52 @@ func CheckStatus(dir string) (Status, error) {
 	return status, nil
 }
 
+func Sync(dir string, stdout, stderr io.Writer) error {
+	if strings.TrimSpace(dir) == "" || !isGitRepo(dir) {
+		return nil
+	}
+	if strings.TrimSpace(gitOutput(dir, "remote", "get-url", "origin")) == "" {
+		return nil
+	}
+
+	branch := strings.TrimSpace(gitOutput(dir, "branch", "--show-current"))
+	if branch == "" {
+		return fmt.Errorf("sync notes repo: cannot detect current branch")
+	}
+
+	if output, err := gitCombined(dir, "fetch", "--prune", "origin"); err != nil {
+		if len(output) > 0 {
+			_, _ = stderr.Write(output)
+		}
+		return compactGitError("git fetch origin", output, err)
+	}
+
+	if status, err := CheckStatus(dir); err == nil && status.Dirty {
+		fmt.Fprintf(stdout, "[notes] auto-committing %d pending change(s)\n", status.DirtyFiles)
+		if err := commitAll(dir, "aoo: sync notes", stdout, stderr); err != nil {
+			return err
+		}
+	}
+
+	if output, err := gitCombined(dir, "pull", "--rebase", "--autostash", "origin", branch); err != nil {
+		if len(output) > 0 {
+			_, _ = stdout.Write(output)
+		}
+		_ = gitRun(dir, io.Discard, io.Discard, "rebase", "--abort")
+		return compactGitError(fmt.Sprintf("git pull --rebase origin %s", branch), output, err)
+	} else if len(output) > 0 && !bytes.Contains(output, []byte("Already up to date.")) {
+		_, _ = stdout.Write(output)
+	}
+
+	if ahead, _ := aheadBehind(dir); ahead > 0 {
+		if err := pushWithRebaseRetry(dir, stdout, stderr); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func PrintHint(status Status, stdout io.Writer) {
 	if !status.IsRepo {
 		return
@@ -184,4 +230,40 @@ func aheadBehind(dir string) (ahead int, behind int) {
 	}
 	fmt.Sscanf(out, "%d %d", &behind, &ahead)
 	return ahead, behind
+}
+
+func commitAll(dir, message string, stdout, stderr io.Writer) error {
+	if err := gitRun(dir, stdout, stderr, "add", "-A"); err != nil {
+		return fmt.Errorf("git add -A: %w", err)
+	}
+	if !hasAnyStagedChanges(dir) {
+		return nil
+	}
+	if err := gitRun(dir, stdout, stderr, "commit", "-m", message); err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
+	return nil
+}
+
+func hasAnyStagedChanges(dir string) bool {
+	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--quiet")
+	return cmd.Run() != nil
+}
+
+func compactGitError(prefix string, output []byte, err error) error {
+	message := strings.TrimSpace(firstNonEmptyLine(string(output)))
+	if message == "" {
+		return fmt.Errorf("%s: %w", prefix, err)
+	}
+	return fmt.Errorf("%s: %s", prefix, message)
+}
+
+func firstNonEmptyLine(text string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }

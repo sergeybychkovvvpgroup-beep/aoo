@@ -1,14 +1,2 @@
 - desc: grep text in files recursively
-  tags:
-    - template
-    - grep
-    - search
-  template: grep -Rni --color=always {{pattern}} {{path}}
-  args:
-    - name: pattern
-      prompt: Text or regex
-      example: ERROR|CRITICAL
-    - name: path
-      prompt: Path
-      default: .
-      example: /var/log
+  cmd: grep -Rni --color=always 'ERROR|CRITICAL' /var/log

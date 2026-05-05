@@ -63,7 +63,7 @@ func TestLoadBytesRejectsInvalidMode(t *testing.T) {
 	result := LoadBytes("notes.yaml", []byte(`
 - desc: invalid
   mode: template
-  template: echo hi
+  text: echo hi
 `))
 
 	if len(result.Errors) != 1 {
@@ -137,5 +137,93 @@ func TestLoadBytesAcceptsMultipleCommandActions(t *testing.T) {
 	}
 	if got := entry.PrimaryRun(); got != "ssh vyos@himki" {
 		t.Fatalf("unexpected primary command: %q", got)
+	}
+}
+
+func TestLoadBytesTreatsNonNoteYAMLAsRawFile(t *testing.T) {
+	result := LoadBytes("netplan-prod.yaml", []byte(`
+network:
+  version: 2
+  ethernets:
+    ens18:
+      dhcp4: true
+`))
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no errors, got %v", result.Errors)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	entry := result.Entries[0]
+	if !entry.IsRaw() {
+		t.Fatal("expected raw entry")
+	}
+	if got := entry.SourceBadge(); got != "yaml" {
+		t.Fatalf("expected yaml badge, got %q", got)
+	}
+	if action := entry.QuickAction(); action == nil || !action.IsShow() {
+		t.Fatalf("expected raw file quick action to be show, got %#v", action)
+	}
+	if !strings.Contains(entry.DisplayValue(), "network:") {
+		t.Fatalf("expected raw display value to include file content, got %q", entry.DisplayValue())
+	}
+}
+
+func TestLoadDirLoadsRawTextFiles(t *testing.T) {
+	workingDir := t.TempDir()
+
+	rawPath := filepath.Join(workingDir, "deploy.py")
+	if err := os.WriteFile(rawPath, []byte("def main():\n\tprint('ok')\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := LoadDir(workingDir)
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no errors, got %v", result.Errors)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	entry := result.Entries[0]
+	if !entry.IsRaw() {
+		t.Fatal("expected raw entry")
+	}
+	if got := entry.SourceBadge(); got != "py" {
+		t.Fatalf("expected py badge, got %q", got)
+	}
+	if got := entry.DisplayName(); got != "deploy" {
+		t.Fatalf("expected display name from file name, got %q", got)
+	}
+}
+
+func TestLoadBytesRejectsUnsupportedTopLevelField(t *testing.T) {
+	result := LoadBytes("notes.yaml", []byte(`
+- desc: tunnel
+  check: ssh host exit
+  cmd: ssh host
+`))
+
+	if len(result.Errors) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(result.Errors))
+	}
+	if !strings.Contains(result.Errors[0].Error(), "unsupported field") {
+		t.Fatalf("expected unsupported field error, got %v", result.Errors[0])
+	}
+}
+
+func TestLoadBytesRejectsUnsupportedActionField(t *testing.T) {
+	result := LoadBytes("notes.yaml", []byte(`
+- desc: tunnel
+  actions:
+    - desc: ssh
+      template: ssh {{host}}
+`))
+
+	if len(result.Errors) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(result.Errors))
+	}
+	if !strings.Contains(result.Errors[0].Error(), "unsupported field") {
+		t.Fatalf("expected unsupported field error, got %v", result.Errors[0])
 	}
 }

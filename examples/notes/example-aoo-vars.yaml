@@ -1,4 +1,5 @@
 - desc: example built-in vars
-  text: inspect built-in variables
-  template: echo app={{aoo_app_dir}} notes={{aoo_notes_dir}}
-  args: []
+  text: |
+    ~/.config/aoo/config.yaml
+    ~/.local/share/aoo/notes
+    /path/to/aoo

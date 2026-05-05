@@ -1,6 +1,7 @@
 package notesrepo
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os/exec"
@@ -39,8 +40,34 @@ func AutoCommitPushPath(path, message string, stdout, stderr io.Writer) error {
 	if strings.TrimSpace(gitOutput(repoRoot, "remote", "get-url", "origin")) == "" {
 		return nil
 	}
+	if err := pushWithRebaseRetry(repoRoot, stdout, stderr); err != nil {
+		return err
+	}
+	return nil
+}
+
+func pushWithRebaseRetry(repoRoot string, stdout, stderr io.Writer) error {
+	if err := gitRun(repoRoot, stdout, stderr, "push"); err == nil {
+		return nil
+	}
+
+	branch := strings.TrimSpace(gitOutput(repoRoot, "branch", "--show-current"))
+	if branch == "" {
+		return fmt.Errorf("git push: cannot detect current branch")
+	}
+
+	fmt.Fprintln(stdout, "[notes] remote changed, trying git pull --rebase")
+	pullOutput, pullErr := gitCombined(repoRoot, "pull", "--rebase", "--autostash", "origin", branch)
+	if len(pullOutput) > 0 {
+		_, _ = stdout.Write(pullOutput)
+	}
+	if pullErr != nil {
+		_ = gitRun(repoRoot, io.Discard, io.Discard, "rebase", "--abort")
+		return fmt.Errorf("git pull --rebase failed, resolve notes repo conflict manually: %w", pullErr)
+	}
+
 	if err := gitRun(repoRoot, stdout, stderr, "push"); err != nil {
-		return fmt.Errorf("git push: %w", err)
+		return fmt.Errorf("git push after rebase: %w", err)
 	}
 	return nil
 }
@@ -65,4 +92,13 @@ func gitRun(dir string, stdout, stderr io.Writer, args ...string) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+func gitCombined(dir string, args ...string) ([]byte, error) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	cmd.Stderr = &output
+	err := cmd.Run()
+	return output.Bytes(), err
 }

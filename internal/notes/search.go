@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	SearchModeFlat        = "flat"
-	SearchModeEntryFirst  = "entry-first"
-	SearchModeHybrid      = "hybrid"
 	SearchModeCommandOnly = "command-only"
+	SearchModeNoteOnly    = "note-only"
 )
 
 type Match struct {
@@ -22,11 +20,14 @@ type Match struct {
 	Detail string
 }
 
-func Filter(entries []Entry, query, mode string) []Match {
-	resolvedMode, normalizedQuery := resolveSearchMode(mode, query)
+func Filter(entries []Entry, query string) []Match {
+	resolvedMode, normalizedQuery := resolveSearchMode(query)
 	candidates := entries
 	if resolvedMode == SearchModeCommandOnly {
 		candidates = commandEntries(entries)
+	}
+	if resolvedMode == SearchModeNoteOnly {
+		candidates = noteEntries(entries)
 	}
 
 	terms := queryTerms(normalizedQuery)
@@ -69,33 +70,17 @@ func Filter(entries []Entry, query, mode string) []Match {
 	return applyMatchLabels(matches, resolvedMode)
 }
 
-func resolveSearchMode(mode, query string) (string, string) {
-	normalizedMode := normalizeSearchMode(mode)
+func resolveSearchMode(query string) (string, string) {
 	trimmedQuery := strings.TrimSpace(query)
-	if normalizedMode != SearchModeHybrid {
-		return normalizedMode, trimmedQuery
-	}
-
 	if trimmedQuery == "" {
-		return SearchModeEntryFirst, ""
+		return SearchModeNoteOnly, ""
 	}
 
 	switch trimmedQuery[0] {
 	case ':', '>':
 		return SearchModeCommandOnly, strings.TrimSpace(trimmedQuery[1:])
 	default:
-		return SearchModeEntryFirst, trimmedQuery
-	}
-}
-
-func normalizeSearchMode(value string) string {
-	switch strings.TrimSpace(strings.ToLower(value)) {
-	case SearchModeEntryFirst:
-		return SearchModeEntryFirst
-	case SearchModeHybrid:
-		return SearchModeHybrid
-	default:
-		return SearchModeFlat
+		return SearchModeNoteOnly, trimmedQuery
 	}
 }
 
@@ -155,8 +140,6 @@ func commandOnlyPresentation(entry Entry) (string, string) {
 	switch {
 	case action.IsCmd():
 		return oneLine(action.Cmd, 120), detail
-	case action.IsTemplate():
-		return oneLine(action.Template, 120), detail
 	default:
 		return entry.DisplayName(), action.DisplayValue()
 	}
@@ -203,7 +186,6 @@ func weightedFields(entry Entry) []weightedField {
 	fields := []weightedField{
 		{value: normalize(entry.DisplayName()), weight: 8},
 		{value: normalize(strings.TrimSuffix(entry.SourceFile, filepathExt(entry.SourceFile))), weight: 7},
-		{value: normalize(strings.Join(entry.Tags, " ")), weight: 7},
 		{value: normalize(entry.Note), weight: 5},
 	}
 	if entry.IsGroup() {
@@ -214,7 +196,6 @@ func weightedFields(entry Entry) []weightedField {
 			weightedField{value: normalize(action.Desc), weight: 6},
 			weightedField{value: normalize(action.Cmd), weight: 5},
 			weightedField{value: normalize(action.Text), weight: 3},
-			weightedField{value: normalize(action.Template), weight: 5},
 			weightedField{value: normalize(action.Banner), weight: 2},
 		)
 	}
@@ -260,7 +241,7 @@ func commandEntries(entries []Entry) []Entry {
 	out := make([]Entry, 0, len(entries))
 	for _, entry := range entries {
 		for _, action := range entry.ActionsList() {
-			if !action.IsCmd() && !action.IsTemplate() {
+			if !action.IsCmd() {
 				continue
 			}
 			actionCopy := action
@@ -271,7 +252,6 @@ func commandEntries(entries []Entry) []Entry {
 			out = append(out, Entry{
 				Desc:       entry.DisplayName(),
 				Actions:    []Action{actionCopy},
-				Tags:       append([]string(nil), entry.Tags...),
 				SourcePath: entry.SourcePath,
 				SourceFile: entry.SourceFile,
 				SourceLine: entry.SourceLine,
@@ -280,11 +260,53 @@ func commandEntries(entries []Entry) []Entry {
 					{value: normalize(entry.DisplayName()), weight: 6},
 					{value: normalize(desc), weight: 8},
 					{value: normalize(actionCopy.Cmd), weight: 9},
-					{value: normalize(actionCopy.Template), weight: 9},
-					{value: normalize(strings.Join(entry.Tags, " ")), weight: 4},
 				},
 			})
 		}
+	}
+	return out
+}
+
+func noteEntries(entries []Entry) []Entry {
+	out := make([]Entry, 0, len(entries))
+	for _, entry := range entries {
+		hasShow := false
+		for _, action := range entry.ActionsList() {
+			if !action.IsShow() {
+				continue
+			}
+			hasShow = true
+			actionCopy := action
+			desc := strings.TrimSpace(action.Desc)
+			if desc == "" || desc == "show" || desc == entry.DisplayName() {
+				desc = entry.DisplayName()
+			} else {
+				desc = strings.TrimSpace(entry.DisplayName() + " " + desc)
+			}
+			out = append(out, Entry{
+				Desc:       desc,
+				Actions:    []Action{actionCopy},
+				SourcePath: entry.SourcePath,
+				SourceFile: entry.SourceFile,
+				SourceLine: entry.SourceLine,
+				SourceKind: entry.SourceKind,
+				index:      entry.index,
+				searchData: []weightedField{
+					{value: normalize(desc), weight: 8},
+					{value: normalize(entry.DisplayName()), weight: 7},
+					{value: normalize(entry.SourceFile), weight: 6},
+					{value: normalize(actionCopy.Desc), weight: 5},
+					{value: normalize(actionCopy.Text), weight: 6},
+				},
+			})
+		}
+		if hasShow {
+			continue
+		}
+		if entry.HasCmd() {
+			continue
+		}
+		out = append(out, entry)
 	}
 	return out
 }
@@ -303,7 +325,6 @@ func buildEntryGroup(entries []Entry) Entry {
 	first := entries[0]
 	group := Entry{
 		Actions:      flattenGroupActions(entries),
-		Tags:         mergeGroupTags(entries),
 		SourcePath:   first.SourcePath,
 		SourceFile:   first.SourceFile,
 		SourceLine:   first.SourceLine,
@@ -357,8 +378,6 @@ func groupActionLabel(entry Entry, action Action, total, index int) string {
 		switch {
 		case action.IsCmd():
 			suffix = fmt.Sprintf("run %d", index+1)
-		case action.IsTemplate():
-			suffix = "template"
 		case action.IsShow():
 			suffix = "show"
 		default:
@@ -366,25 +385,6 @@ func groupActionLabel(entry Entry, action Action, total, index int) string {
 		}
 	}
 	return base + " :: " + suffix
-}
-
-func mergeGroupTags(entries []Entry) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(entries)*2)
-	for _, entry := range entries {
-		for _, tag := range entry.Tags {
-			tag = strings.TrimSpace(tag)
-			if tag == "" {
-				continue
-			}
-			if _, ok := seen[tag]; ok {
-				continue
-			}
-			seen[tag] = struct{}{}
-			out = append(out, tag)
-		}
-	}
-	return out
 }
 
 func matchScore(field weightedField, term string) int {

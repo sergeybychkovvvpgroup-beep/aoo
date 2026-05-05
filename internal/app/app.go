@@ -16,7 +16,6 @@ import (
 	"aoo/internal/notecreate"
 	"aoo/internal/notes"
 	"aoo/internal/notesrepo"
-	"aoo/internal/templatecmd"
 	"aoo/internal/ui"
 )
 
@@ -53,7 +52,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return runInteractive(args, stdin, stdout, stderr)
 }
 
-func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (err error) {
 	fs := flag.NewFlagSet("aoo", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -84,10 +83,9 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		}
 	}
 
+	var syncStream <-chan ui.SyncStatus
 	if strings.TrimSpace(root) != "" {
-		if status, statusErr := notesrepo.CheckStatus(root); statusErr == nil {
-			notesrepo.PrintHint(status, stdout)
-		}
+		syncStream = startNotesSync(root)
 	}
 
 	themeName, _, err := config.ResolveTheme(*themeFlag)
@@ -96,11 +94,14 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 	}
 
 	uiOptions := ui.Options{
-		FullScreen:  cfg.FullScreen,
-		Height:      cfg.PickerHeight,
-		ShowPreview: cfg.ShowPreview,
-		Layout:      cfg.Layout,
-		SearchMode:  cfg.SearchMode,
+		FullScreen:       cfg.FullScreen,
+		Height:           cfg.PickerHeight,
+		ShowPreview:      cfg.ShowPreview,
+		Layout:           cfg.Layout,
+		SyncStatusStream: syncStream,
+	}
+	if syncStream != nil {
+		uiOptions.InitialSync = ui.SyncStatus{State: ui.SyncStateRunning}
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -146,8 +147,6 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 			case action.IsShow():
 				printActionText(*selected, action, stdout)
 				return nil
-			case action.IsTemplate():
-				return runTemplate(*selected, action, stdin, stdout, stderr)
 			case action.IsCmd():
 				return runCommand(*selected, action, stdin, stdout, stderr)
 			}
@@ -168,8 +167,6 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		case ui.ActionRead:
 			printActionText(*selected, action.Action, stdout)
 			return nil
-		case ui.ActionTemplate:
-			return runTemplate(*selected, action.Action, stdin, stdout, stderr)
 		case ui.ActionRun:
 			return runCommand(*selected, action.Action, stdin, stdout, stderr)
 		default:
@@ -187,33 +184,31 @@ func clearInteractiveArea(stdout io.Writer, height int) {
 	fmt.Fprintf(stdout, "\r\x1b[%dA\x1b[J", rows)
 }
 
-func runTemplate(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout, stderr io.Writer) error {
-	if action == nil || !action.IsTemplate() {
-		return errors.New("selected action is not a template action")
-	}
-	values, err := builtInTemplateValues()
-	if err != nil {
-		return err
-	}
+func startNotesSync(root string) <-chan ui.SyncStatus {
+	result := make(chan ui.SyncStatus, 1)
+	go func() {
+		defer close(result)
+		if err := notesrepo.Sync(root, io.Discard, io.Discard); err != nil {
+			result <- ui.SyncStatus{State: ui.SyncStateError, Message: shortError(err)}
+			return
+		}
+		result <- ui.SyncStatus{State: ui.SyncStateOK}
+	}()
+	return result
+}
 
-	title := entry.DisplayName()
-	if strings.TrimSpace(action.Desc) != "" {
-		title = fmt.Sprintf("%s :: %s", entry.DisplayName(), action.Desc)
+func shortError(err error) string {
+	if err == nil {
+		return ""
 	}
-	prepared, err := templatecmd.Prompt(title, *action, stdin, stdout, values)
-	if err != nil {
-		return err
+	text := strings.TrimSpace(err.Error())
+	if text == "" {
+		return "unknown error"
 	}
-
-	if banner := strings.TrimSpace(action.Banner); banner != "" {
-		fmt.Fprintln(stdout, renderBanner(title, banner))
+	if line := strings.TrimSpace(strings.Split(text, "\n")[0]); line != "" {
+		return line
 	}
-
-	cmd := exec.Command("/bin/sh", "-lc", prepared.Command)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	return cmd.Run()
+	return text
 }
 
 func runValidate(args []string, stdout, stderr io.Writer) error {
@@ -371,7 +366,6 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
 	fmt.Fprintf(stdout, "layout: %s\n", cfg.Layout)
-	fmt.Fprintf(stdout, "search_mode: %s\n", cfg.SearchMode)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
 	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
@@ -579,30 +573,6 @@ func emptyIfUnset(value string) string {
 		return "(not set)"
 	}
 	return value
-}
-
-func builtInTemplateValues() (map[string]string, error) {
-	values := map[string]string{}
-
-	notesDir, _, err := config.ResolveNotesDir("")
-	if err == nil && strings.TrimSpace(notesDir) != "" {
-		values["aoo_notes_dir"] = notesDir
-	}
-
-	appDir, _, err := config.ResolveAppDir("")
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(appDir) != "" {
-		values["aoo_app_dir"] = appDir
-	}
-	configPath, err := config.ConfigPath()
-	if err != nil {
-		return nil, err
-	}
-	values["aoo_config_file"] = configPath
-
-	return values, nil
 }
 
 func mergeEntries(primary, secondary []notes.Entry) []notes.Entry {

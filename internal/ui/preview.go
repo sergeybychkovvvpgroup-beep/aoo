@@ -274,7 +274,7 @@ func applySyntaxStyles(styleIDs []int, runes []rune, section string) {
 		}
 	}
 
-	if section == "command" || section == "template" || looksLikeShell(trimmed) || looksLikeConfig(trimmed) {
+	if section == "command" || looksLikeShell(trimmed) || looksLikeConfig(trimmed) {
 		markWords(styleIDs, runes, 1, map[string]struct{}{
 			"set": {}, "delete": {}, "show": {}, "edit": {}, "commit": {}, "save": {}, "run": {},
 			"ssh": {}, "sudo": {}, "curl": {}, "docker": {}, "systemctl": {}, "ip": {}, "ping": {},

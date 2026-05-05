@@ -36,6 +36,26 @@ func TestEntryActionsPreferShowFirst(t *testing.T) {
 	}
 }
 
+func TestEntryActionsLabelRawFileWithExtension(t *testing.T) {
+	entry := notes.Entry{
+		Desc:       "netplan prod",
+		SourceFile: "netplan-prod.yaml",
+		SourceKind: notes.SourceKindRaw,
+		Actions: []notes.Action{{
+			Desc: "yaml",
+			Text: "network:\n  version: 2\n",
+		}},
+	}
+
+	actions := entryActions(entry)
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+	if actions[0].Label != "show yaml" {
+		t.Fatalf("expected raw action label to include extension, got %q", actions[0].Label)
+	}
+}
+
 func TestActionHintTextShowsCommandAndTextActions(t *testing.T) {
 	model := ActionPickerModel{
 		options: Options{},
@@ -60,7 +80,7 @@ func TestActionHintTextShowsCommandAndTextActions(t *testing.T) {
 
 func TestActionDetailLineShowsHint(t *testing.T) {
 	model := ActionPickerModel{
-		theme: Theme{HelpFG: "8"},
+		theme:   Theme{HelpFG: "8"},
 		options: Options{},
 	}
 	got := model.detailLine("ssh vyos@himki", "enter: run command", 80, lipgloss.NewStyle(), lipgloss.NewStyle())

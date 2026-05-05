@@ -1,18 +1,12 @@
 - desc: aoo list themes
-  tags: [aoo, theme]
   action: aoo themes
 - desc: aoo version
-  tags: [aoo]
   action: aoo version
 - desc: aoo make build
-  tags: [aoo, build]
   action: make build
 - desc: aoo make update
-  tags: [aoo, update]
   action: sudo make update
 - desc: aoo make test
-  tags: [aoo, test]
   action: make test
 - desc: aoo make validate
-  tags: [aoo, validate]
   action: make validate

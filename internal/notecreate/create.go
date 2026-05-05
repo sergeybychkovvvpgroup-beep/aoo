@@ -79,20 +79,15 @@ func scaffold(kind Kind, title string) (string, int, error) {
 	case KindCommand:
 		lines := []string{
 			"desc: " + desc,
-			"tags: []",
-			"text: |",
-			"  what this command does",
-			"action: |",
-			"  echo \"replace with command\"",
+			"cmd: echo \"replace with command\"",
 			"",
 		}
-		return strings.Join(lines, "\n"), 4, nil
+		return strings.Join(lines, "\n"), 2, nil
 	case KindNote:
 		fallthrough
 	default:
 		lines := []string{
 			"desc: " + desc,
-			"tags: []",
 			"text: |",
 			"  add note here",
 			"",

@@ -2,7 +2,7 @@
 
 Быстрая терминальная утилита для заметок и запуска команд.
 
-Храни заметки, команды, хосты и сниппеты в YAML. Используй fuzzy search по содержимому заметок, находи нужное за секунды и запускай команды прямо из заметок.
+Храни команды в YAML, а реальные сниппеты и конфиги как обычные файлы. Используй fuzzy search по содержимому заметок и файлов, находи нужное за секунды и запускай команды прямо из `aoo`.
 
 ![aoo demo](docs/demo.png)
 
@@ -43,7 +43,8 @@ aoo set-app-dir ~/workspace/aoo
 ```
 
 Если notes repo приватный, `aoo` покажет public key, который нужно добавить в Deploy Keys.
-`aoo` не делает auto-fetch notes repo на каждом старте, поэтому не должен постоянно дёргать passphrase от SSH key.
+Если `notes_dir` это git repo, `aoo` сам делает `fetch/pull/push` при старте и после редактирования заметок.
+Если SSH key с passphrase, лучше держать его в `ssh-agent`.
 
 Проверить конфиг:
 
@@ -57,7 +58,6 @@ aoo config show
 ```yaml
 full_screen: true
 picker_height: 14
-search_mode: hybrid
 show_preview: false
 preview_pane: false
 ```
@@ -95,9 +95,16 @@ aoo add "router dhcp"
 aoo add cmd "restart nginx"
 ```
 
-Обе команды создают YAML-скелет, открывают его в `$VISUAL` / `$EDITOR`, а после выхода из редактора автоматически делают commit и push, если `notes_dir` это git repo.
+Обе команды создают YAML-скелет, открывают его в `$VISUAL` / `$EDITOR`, а после выхода из редактора автоматически делают commit/pull/push, если `notes_dir` это git repo.
 
 ## Формат заметок
+
+`aoo` поддерживает два простых формата:
+
+- YAML-записи для команд и launcher-заметок
+- raw-файлы для реальных сниппетов и конфигов
+
+### YAML-записи
 
 ```yaml
 - desc: example ssh
@@ -107,13 +114,8 @@ aoo add cmd "restart nginx"
 - desc: example url
   text: https://service.example.local
 
-- desc: example nmap template
-  tags: [nmap, scan]
-  template: sudo nmap -O {{host}}
-  args:
-    - name: host
-      prompt: Host or IP
-      example: 192.168.1.1
+- desc: example command
+  cmd: dig nas.example.local A +short
 ```
 
 Поведение:
@@ -124,24 +126,46 @@ aoo add cmd "restart nginx"
 - старый формат `actions` остаётся только для совместимости
 - `text` показывает текст
 - `cmd` запускается сразу после выбора
-- `template` спрашивает аргументы, показывает итоговую команду и сразу запускает её
 - `full_screen: true` включает alt-screen и использует всю высоту терминала
 - когда `full_screen: false`, высота picker ограничивается через `picker_height`, поэтому видно терминал до запуска `aoo`
+- обычный ввод ищет только заметки и файлы
+- `:query` или `>query` показывает только команды
 - `show_preview: false` делает каждый результат поиска однострочным
 - `preview_pane: true` показывает правую preview-панель как в `fzf`
 - старайся держать одну запись = одна основная задача
 
-Встроенные переменные шаблонов:
+### Raw-файлы
 
-- `{{aoo_notes_dir}}`
-- `{{aoo_app_dir}}`
-- `{{aoo_config_file}}`
+Для сниппетов не обязательно использовать YAML-обёртку. Можно положить реальный файл как есть:
+
+- `netplan-prod.yaml`
+- `router-bgp.conf`
+- `deploy.py`
+- `notes.md`
+
+Пример `netplan-prod.yaml`:
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    ens18:
+      dhcp4: true
+```
+
+Поведение raw-файлов:
+
+- если `*.yaml` / `*.yml` не содержит поля `aoo` (`desc`, `cmd`, `text`, `run` и т.д.), файл считается raw-сниппетом
+- raw-файл показывается в поиске как отдельная заметка
+- `desc` строится из имени файла
+- `Enter` печатает содержимое как есть
+- в action label и hint показывается расширение файла: `yaml`, `py`, `conf`; если расширения нет, используется `raw`
 
 Пример команды для конфига:
 
 ```yaml
 - desc: edit aoo config
-  cmd: $EDITOR {{aoo_config_file}}
+  cmd: $EDITOR ~/.config/aoo/config.yaml
 ```
 
 ## Темы

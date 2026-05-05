@@ -2,7 +2,7 @@
 
 Fast terminal notes and command launcher.
 
-Store notes, commands, hosts, and snippets in YAML. Use fuzzy search across note contents, find what you need in seconds, and run commands directly from notes.
+Store commands in YAML and keep real snippets/configs as plain files. Use fuzzy search across notes and files, find what you need in seconds, and run commands directly from `aoo`.
 
 ![aoo demo](docs/demo.png)
 
@@ -43,7 +43,8 @@ aoo set-app-dir ~/workspace/aoo
 ```
 
 If the notes repo is private, `aoo` prints the public key that should be added to Deploy Keys.
-`aoo` does not auto-fetch notes repo on every start, so it will not keep asking for your SSH key passphrase.
+If `notes_dir` is a git repo, `aoo` auto-runs `fetch/pull/push` on startup and after note edits.
+If your SSH key has a passphrase, keep it loaded in `ssh-agent`.
 
 Check config:
 
@@ -57,7 +58,6 @@ Useful UI settings in `config.yaml`:
 ```yaml
 full_screen: true
 picker_height: 14
-search_mode: hybrid
 show_preview: false
 preview_pane: false
 ```
@@ -92,7 +92,7 @@ aoo add "router dhcp"
 aoo add cmd "restart nginx"
 ```
 
-Both commands create a YAML scaffold, open it in `$VISUAL` / `$EDITOR`, and after editor exit auto-commit + auto-push changes when `notes_dir` is a git repo.
+Both commands create a YAML scaffold, open it in `$VISUAL` / `$EDITOR`, and after editor exit auto-run commit/pull/push when `notes_dir` is a git repo.
 
 ## Notes Format
 
@@ -105,15 +105,7 @@ Both commands create a YAML scaffold, open it in `$VISUAL` / `$EDITOR`, and afte
   text: https://service.example.local
 
 - desc: example command
-  action: ssh admin@example.local
-
-- desc: example nmap template
-  tags: [nmap, scan]
-  template: sudo nmap -O {{host}}
-  args:
-  - name: host
-    prompt: Host or IP
-    example: 192.168.1.1
+  cmd: dig nas.example.local A +short
 ```
 
 Behavior:
@@ -124,26 +116,18 @@ Behavior:
 - old `actions` format still works as a compatibility fallback
 - `text` shows text
 - `cmd` runs immediately after selection
-- `template` asks for args, renders the final command, and runs it immediately
 - `full_screen: true` uses the terminal alternate screen and full terminal height
 - when `full_screen: false`, picker height is limited by `picker_height`, so prior terminal output stays visible
-- `search_mode: flat` keeps the old behavior and shows individual matching notes/commands
-- `search_mode: entry-first` groups matching entries from one YAML file into one result and shows commands after `Enter`
-- `search_mode: hybrid` behaves like `entry-first`, but `:query` or `>query` switches to direct flat search
+- plain query searches only notes and files
+- `:query` or `>query` searches only commands
 - `show_preview: false` makes each search result a single line
 - `preview_pane: true` shows a right-side preview panel like `fzf`
 - keep one note = one main thing whenever possible
 
-Built-in template variables:
-
-- `{{aoo_notes_dir}}`
-- `{{aoo_app_dir}}`
-- `{{aoo_config_file}}`
-
 Config command example:
 
 ```yaml
-- action: $EDITOR {{aoo_config_file}}
+- cmd: $EDITOR ~/.config/aoo/config.yaml
 ```
 
 ## Themes

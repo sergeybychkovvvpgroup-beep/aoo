@@ -1,20 +1,7 @@
 - desc: notes git pull
-  tags:
-    - template
-    - notes
-    - git
-    - pull
-  template: git -C {{aoo_notes_dir}} pull --rebase
-  args: []
+  cmd: git -C ~/.local/share/aoo/notes pull --rebase
 - desc: notes git add commit push
-  tags:
-    - template
-    - notes
-    - git
-    - push
-  template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m {{message}} && git -C {{aoo_notes_dir}} push
-  args:
-    - name: message
-      prompt: Commit message
-      default: update notes
-      example: add new hosts
+  cmd: |-
+    git -C ~/.local/share/aoo/notes add .
+    git -C ~/.local/share/aoo/notes commit -m "update notes"
+    git -C ~/.local/share/aoo/notes push

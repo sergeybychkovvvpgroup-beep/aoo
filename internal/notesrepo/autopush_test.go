@@ -40,6 +40,192 @@ func TestAutoCommitPushPathCommitsAndPushes(t *testing.T) {
 	}
 }
 
+func TestAutoCommitPushPathRebasesWhenRemoteHasNewCommit(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	worktree := filepath.Join(t.TempDir(), "notes")
+	otherClone := filepath.Join(t.TempDir(), "other")
+
+	runGit(t, "", "init", "--bare", remote)
+	runGit(t, "", "clone", remote, worktree)
+	runGit(t, worktree, "config", "user.name", "aoo-test")
+	runGit(t, worktree, "config", "user.email", "aoo-test@example.com")
+
+	notePath := filepath.Join(worktree, "router.yaml")
+	if err := os.WriteFile(notePath, []byte("desc: router\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, worktree, "add", "router.yaml")
+	runGit(t, worktree, "commit", "-m", "initial")
+	branch := strings.TrimSpace(runGitOutput(t, worktree, "branch", "--show-current"))
+	runGit(t, worktree, "push", "-u", "origin", branch)
+
+	runGit(t, "", "clone", remote, otherClone)
+	runGit(t, otherClone, "config", "user.name", "aoo-test")
+	runGit(t, otherClone, "config", "user.email", "aoo-test@example.com")
+	if err := os.WriteFile(filepath.Join(otherClone, "remote.yaml"), []byte("desc: remote\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, otherClone, "add", "remote.yaml")
+	runGit(t, otherClone, "commit", "-m", "remote update")
+	runGit(t, otherClone, "push")
+
+	if err := os.WriteFile(notePath, []byte("desc: router local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := AutoCommitPushPath(notePath, "aoo: update router.yaml", &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+
+	remoteLog := runGitOutput(t, "", "--git-dir", remote, "log", "--format=%s", "-2")
+	if !strings.Contains(remoteLog, "aoo: update router.yaml") || !strings.Contains(remoteLog, "remote update") {
+		t.Fatalf("expected rebased push to include both commits, got %q", remoteLog)
+	}
+}
+
+func TestAutoCommitPushPathAbortsRebaseOnConflict(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	worktree := filepath.Join(t.TempDir(), "notes")
+	otherClone := filepath.Join(t.TempDir(), "other")
+
+	runGit(t, "", "init", "--bare", remote)
+	runGit(t, "", "clone", remote, worktree)
+	runGit(t, worktree, "config", "user.name", "aoo-test")
+	runGit(t, worktree, "config", "user.email", "aoo-test@example.com")
+
+	notePath := filepath.Join(worktree, "router.yaml")
+	if err := os.WriteFile(notePath, []byte("desc: router\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, worktree, "add", "router.yaml")
+	runGit(t, worktree, "commit", "-m", "initial")
+	branch := strings.TrimSpace(runGitOutput(t, worktree, "branch", "--show-current"))
+	runGit(t, worktree, "push", "-u", "origin", branch)
+
+	runGit(t, "", "clone", remote, otherClone)
+	runGit(t, otherClone, "config", "user.name", "aoo-test")
+	runGit(t, otherClone, "config", "user.email", "aoo-test@example.com")
+	if err := os.WriteFile(filepath.Join(otherClone, "router.yaml"), []byte("desc: remote change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, otherClone, "add", "router.yaml")
+	runGit(t, otherClone, "commit", "-m", "remote conflict")
+	runGit(t, otherClone, "push")
+
+	if err := os.WriteFile(notePath, []byte("desc: local change\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := AutoCommitPushPath(notePath, "aoo: update router.yaml", &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+	if !strings.Contains(err.Error(), "resolve notes repo conflict manually") {
+		t.Fatalf("unexpected conflict error: %v", err)
+	}
+
+	status := strings.TrimSpace(gitOutput(worktree, "status", "--short"))
+	if strings.Contains(status, "UU ") {
+		t.Fatalf("expected rebase to be aborted cleanly, got status %q", status)
+	}
+	if strings.TrimSpace(gitOutput(worktree, "rebase", "--show-current-patch")) != "" {
+		t.Fatal("expected no active rebase after abort")
+	}
+}
+
+func TestSyncCommitsPullsAndPushesPendingChanges(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	worktree := filepath.Join(t.TempDir(), "notes")
+	otherClone := filepath.Join(t.TempDir(), "other")
+
+	runGit(t, "", "init", "--bare", remote)
+	runGit(t, "", "clone", remote, worktree)
+	runGit(t, worktree, "config", "user.name", "aoo-test")
+	runGit(t, worktree, "config", "user.email", "aoo-test@example.com")
+
+	notePath := filepath.Join(worktree, "router.yaml")
+	if err := os.WriteFile(notePath, []byte("desc: router\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, worktree, "add", "router.yaml")
+	runGit(t, worktree, "commit", "-m", "initial")
+	branch := strings.TrimSpace(runGitOutput(t, worktree, "branch", "--show-current"))
+	runGit(t, worktree, "push", "-u", "origin", branch)
+
+	runGit(t, "", "clone", remote, otherClone)
+	runGit(t, otherClone, "config", "user.name", "aoo-test")
+	runGit(t, otherClone, "config", "user.email", "aoo-test@example.com")
+	if err := os.WriteFile(filepath.Join(otherClone, "remote.yaml"), []byte("desc: remote\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, otherClone, "add", "remote.yaml")
+	runGit(t, otherClone, "commit", "-m", "remote update")
+	runGit(t, otherClone, "push")
+
+	if err := os.WriteFile(notePath, []byte("desc: local pending\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := Sync(worktree, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := strings.TrimSpace(gitOutput(worktree, "status", "--short")); got != "" {
+		t.Fatalf("expected clean worktree after sync, got %q", got)
+	}
+
+	log := runGitOutput(t, "", "--git-dir", remote, "log", "--format=%s", "-3")
+	if !strings.Contains(log, "aoo: sync notes") || !strings.Contains(log, "remote update") {
+		t.Fatalf("expected synced history to include local and remote commits, got %q", log)
+	}
+}
+
+func TestSyncPullsRemoteChangesIntoCleanClone(t *testing.T) {
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	worktree := filepath.Join(t.TempDir(), "notes")
+	otherClone := filepath.Join(t.TempDir(), "other")
+
+	runGit(t, "", "init", "--bare", remote)
+	runGit(t, "", "clone", remote, worktree)
+	runGit(t, worktree, "config", "user.name", "aoo-test")
+	runGit(t, worktree, "config", "user.email", "aoo-test@example.com")
+
+	notePath := filepath.Join(worktree, "router.yaml")
+	if err := os.WriteFile(notePath, []byte("desc: router\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, worktree, "add", "router.yaml")
+	runGit(t, worktree, "commit", "-m", "initial")
+	branch := strings.TrimSpace(runGitOutput(t, worktree, "branch", "--show-current"))
+	runGit(t, worktree, "push", "-u", "origin", branch)
+
+	runGit(t, "", "clone", remote, otherClone)
+	runGit(t, otherClone, "config", "user.name", "aoo-test")
+	runGit(t, otherClone, "config", "user.email", "aoo-test@example.com")
+	if err := os.WriteFile(filepath.Join(otherClone, "extra.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, otherClone, "add", "extra.md")
+	runGit(t, otherClone, "commit", "-m", "remote extra")
+	runGit(t, otherClone, "push")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := Sync(worktree, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(worktree, "extra.md")); err != nil {
+		t.Fatalf("expected remote file to be pulled locally: %v", err)
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 

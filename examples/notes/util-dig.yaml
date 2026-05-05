@@ -1,14 +1,2 @@
 - desc: dig dns record
-  tags:
-    - template
-    - dns
-    - dig
-  template: dig {{name}} {{record_type}} +short
-  args:
-    - name: name
-      prompt: DNS name
-      example: nas.example.local
-    - name: record_type
-      prompt: Record type
-      default: A
-      example: AAAA
+  cmd: dig nas.example.local A +short

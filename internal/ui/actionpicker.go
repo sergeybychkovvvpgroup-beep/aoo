@@ -12,9 +12,8 @@ import (
 type ActionKind string
 
 const (
-	ActionRead     ActionKind = "show"
-	ActionRun      ActionKind = "run"
-	ActionTemplate ActionKind = "template"
+	ActionRead ActionKind = "show"
+	ActionRun  ActionKind = "run"
 )
 
 type EntryAction struct {
@@ -247,8 +246,6 @@ func entryActions(entry notes.Entry) []EntryAction {
 			switch {
 			case action.IsCmd():
 				label = oneLineOrFallback(action.Cmd, fmt.Sprintf("run %d", i+1))
-			case action.IsTemplate():
-				label = "template"
 			case action.IsShow():
 				label = "show"
 			default:
@@ -266,11 +263,12 @@ func entryActions(entry notes.Entry) []EntryAction {
 			item.Kind = ActionRead
 		case action.IsCmd():
 			item.Kind = ActionRun
-		case action.IsTemplate():
-			item.Kind = ActionTemplate
 		}
 		if item.Kind == ActionRead && label == "show" {
 			item.Label = "show note"
+		}
+		if item.Kind == ActionRead && entry.IsRaw() {
+			item.Label = "show " + entry.SourceBadge()
 		}
 		actions = append(actions, item)
 	}
@@ -288,11 +286,12 @@ func oneLineOrFallback(value, fallback string) string {
 func (m ActionPickerModel) enterHintText(action EntryAction) string {
 	switch action.Kind {
 	case ActionRead:
+		if strings.HasPrefix(strings.TrimSpace(action.Label), "show ") {
+			return "enter: print " + strings.TrimSpace(strings.TrimPrefix(action.Label, "show "))
+		}
 		return "enter: print note"
 	case ActionRun:
 		return "enter: run command"
-	case ActionTemplate:
-		return "enter: fill template"
 	}
 	return ""
 }

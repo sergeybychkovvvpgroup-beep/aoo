@@ -10,7 +10,6 @@ func TestFilterMatchesMultiWordAcrossFields(t *testing.T) {
 		{
 			Desc:       "internal warehouse router vyos",
 			SourceFile: "chashnikovo-wh2.yaml",
-			Tags:       []string{"warehouse"},
 		},
 		{
 			Desc:       "office notebook",
@@ -18,7 +17,7 @@ func TestFilterMatchesMultiWordAcrossFields(t *testing.T) {
 		},
 	}
 
-	results := Filter(entries, "chash router", SearchModeFlat)
+	results := Filter(entries, "chash router")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -32,22 +31,22 @@ func TestFilterDoesNotReturnLooseSubsequenceNoise(t *testing.T) {
 	entries := []Entry{
 		{
 			Desc:       "nmap os detect host",
-			Actions:    []Action{{Desc: "run", Template: "sudo nmap -O {{host}}"}},
+			Actions:    []Action{{Desc: "run", Cmd: "sudo nmap -O 192.168.1.1"}},
 			SourceFile: "command_templates.yaml",
 		},
 		{
 			Desc:       "mount cifs share",
-			Actions:    []Action{{Desc: "run", Template: "sudo mount -t cifs -o username={{username}} //{{server}}/{{share}} {{mountpoint}}"}},
+			Actions:    []Action{{Desc: "run", Cmd: "sudo mount -t cifs -o username=user //server/share /mnt/share"}},
 			SourceFile: "command_templates.yaml",
 		},
 		{
 			Desc:       "ssh to host",
-			Actions:    []Action{{Desc: "run", Template: "ssh {{user}}@{{host}}"}},
+			Actions:    []Action{{Desc: "run", Cmd: "ssh root@192.168.1.10"}},
 			SourceFile: "command_templates.yaml",
 		},
 	}
 
-	results := Filter(entries, "nmap", SearchModeFlat)
+	results := Filter(entries, ":nmap")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -76,27 +75,24 @@ func TestFilterMatchesNumericTokensWithLeadingZeros(t *testing.T) {
 		},
 	}
 
-	results := Filter(entries, "beria-3", SearchModeFlat)
-	if len(results) < 2 {
-		t.Fatalf("expected at least 2 results, got %d", len(results))
+	results := Filter(entries, ":beria-3")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 command result, got %d", len(results))
 	}
 
 	if results[0].Entry.Desc != "ssh pve-beria-03" {
 		t.Fatalf("unexpected first result: %s", results[0].Entry.Desc)
 	}
-	if results[1].Entry.Desc != "IPMI netrack-pve-beria-03" {
-		t.Fatalf("unexpected second result: %s", results[1].Entry.Desc)
-	}
 }
 
-func TestEntryActionSummarizesTemplate(t *testing.T) {
+func TestEntryActionSummarizesCommand(t *testing.T) {
 	entry := Entry{
 		Desc:    "ssh to host",
-		Actions: []Action{{Desc: "run", Template: "ssh {{user}}@{{host}}"}},
+		Actions: []Action{{Desc: "run", Cmd: "ssh root@192.168.1.10"}},
 	}
 
-	if got := entry.Action(); got != "TEMPLATE" {
-		t.Fatalf("expected template action summary, got %s", got)
+	if got := entry.Action(); got != "RUN" {
+		t.Fatalf("expected command action summary, got %s", got)
 	}
 }
 
@@ -255,7 +251,7 @@ func TestFilterMatchesDottedNumericFragmentAsSingleTerm(t *testing.T) {
 		},
 	}
 
-	results := Filter(entries, "53.3", SearchModeFlat)
+	results := Filter(entries, "53.3")
 	if len(results) == 0 {
 		t.Fatal("expected matches")
 	}
@@ -264,7 +260,7 @@ func TestFilterMatchesDottedNumericFragmentAsSingleTerm(t *testing.T) {
 	}
 }
 
-func TestFilterEntryFirstKeepsEntriesSeparate(t *testing.T) {
+func TestFilterReturnsNoteEntriesForPlainQuery(t *testing.T) {
 	entries := []Entry{
 		{
 			Desc:       "ssh vyos-volga",
@@ -276,7 +272,7 @@ func TestFilterEntryFirstKeepsEntriesSeparate(t *testing.T) {
 		},
 		{
 			Desc:       "show dhcp subnets",
-			Actions:    []Action{{Desc: "show", Cmd: "show dhcp subnets"}},
+			Actions:    []Action{{Desc: "show", Text: "show dhcp subnets"}},
 			SourceFile: "vyos-chashnikovo.yaml",
 			SourcePath: "/notes/vyos-chashnikovo.yaml",
 			SourceLine: 8,
@@ -287,16 +283,19 @@ func TestFilterEntryFirstKeepsEntriesSeparate(t *testing.T) {
 		entries[i].searchData = weightedFields(entries[i])
 	}
 
-	results := Filter(entries, "chashnikovo", SearchModeEntryFirst)
-	if len(results) != 2 {
-		t.Fatalf("expected 2 entry results, got %d", len(results))
+	results := Filter(entries, "dhcp")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 note result, got %d", len(results))
 	}
-	if results[0].Entry.IsGroup() || results[1].Entry.IsGroup() {
-		t.Fatal("expected plain entry results, not grouped entries")
+	if results[0].Entry.IsGroup() {
+		t.Fatal("expected plain query to return note entry, not group")
+	}
+	if got := results[0].Entry.Desc; got != "show dhcp subnets" {
+		t.Fatalf("expected plain query to return note/show entry, got %q", got)
 	}
 }
 
-func TestFilterHybridUsesEntryResultsWithoutPrefix(t *testing.T) {
+func TestFilterUsesCommandResultsWithPrefix(t *testing.T) {
 	entries := []Entry{
 		{
 			Desc:       "ssh vyos-volga",
@@ -317,37 +316,7 @@ func TestFilterHybridUsesEntryResultsWithoutPrefix(t *testing.T) {
 		entries[i].searchData = weightedFields(entries[i])
 	}
 
-	results := Filter(entries, "chashnikovo", SearchModeHybrid)
-	if len(results) != 2 {
-		t.Fatalf("expected 2 entry results, got %d", len(results))
-	}
-	if results[0].Entry.IsGroup() || results[1].Entry.IsGroup() {
-		t.Fatal("expected hybrid search without prefix to return entries, not groups")
-	}
-}
-
-func TestFilterHybridUsesFlatResultsWithPrefix(t *testing.T) {
-	entries := []Entry{
-		{
-			Desc:       "ssh vyos-volga",
-			Actions:    []Action{{Desc: "ssh", Cmd: "ssh vyos@volga"}},
-			SourceFile: "vyos-chashnikovo.yaml",
-			SourcePath: "/notes/vyos-chashnikovo.yaml",
-			index:      1,
-		},
-		{
-			Desc:       "show dhcp subnets",
-			Actions:    []Action{{Desc: "show", Cmd: "show dhcp subnets"}},
-			SourceFile: "vyos-chashnikovo.yaml",
-			SourcePath: "/notes/vyos-chashnikovo.yaml",
-			index:      2,
-		},
-	}
-	for i := range entries {
-		entries[i].searchData = weightedFields(entries[i])
-	}
-
-	results := Filter(entries, ":ssh", SearchModeHybrid)
+	results := Filter(entries, ":ssh")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 flat result, got %d", len(results))
 	}
@@ -356,6 +325,33 @@ func TestFilterHybridUsesFlatResultsWithPrefix(t *testing.T) {
 	}
 	if got := results[0].Entry.Desc; got != "ssh vyos-volga" {
 		t.Fatalf("unexpected first flat result: %s", got)
+	}
+}
+
+func TestFilterWithoutPrefixExcludesCommandOnlyEntries(t *testing.T) {
+	entries := []Entry{
+		{
+			Desc:       "ssh vyos-volga",
+			Actions:    []Action{{Desc: "ssh", Cmd: "ssh vyos@volga"}},
+			SourceFile: "vyos-chashnikovo.yaml",
+			SourcePath: "/notes/vyos-chashnikovo.yaml",
+			index:      1,
+		},
+		{
+			Desc:       "router notes",
+			Actions:    []Action{{Desc: "show", Text: "dhcp relay and static routes"}},
+			SourceFile: "vyos-chashnikovo.yaml",
+			SourcePath: "/notes/vyos-chashnikovo.yaml",
+			index:      2,
+		},
+	}
+	for i := range entries {
+		entries[i].searchData = weightedFields(entries[i])
+	}
+
+	results := Filter(entries, "ssh")
+	if len(results) != 0 {
+		t.Fatalf("expected no results for command-only entries without prefix, got %d", len(results))
 	}
 }
 
@@ -380,7 +376,7 @@ func TestFilterCommandOnlyExcludesShowOnlyEntries(t *testing.T) {
 		entries[i].searchData = weightedFields(entries[i])
 	}
 
-	results := Filter(entries, ":vyos", SearchModeHybrid)
+	results := Filter(entries, ":vyos")
 	if len(results) != 1 {
 		t.Fatalf("expected only command entries in prefix search, got %d", len(results))
 	}
@@ -403,7 +399,7 @@ func TestFilterCommandOnlyShowsCommandAsPrimaryLine(t *testing.T) {
 		entries[i].searchData = weightedFields(entries[i])
 	}
 
-	results := Filter(entries, ":ssh", SearchModeHybrid)
+	results := Filter(entries, ":ssh")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -430,7 +426,7 @@ func TestFilterFindsLegacyTopLevelDescViaActionDescCompatibility(t *testing.T) {
 		t.Fatalf("expected no errors, got %v", result.Errors)
 	}
 
-	results := Filter(result.Entries, "netpla", SearchModeHybrid)
+	results := Filter(result.Entries, "netpla")
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}

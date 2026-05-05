@@ -18,8 +18,8 @@ func TestCreateCommandDraft(t *testing.T) {
 	if !strings.HasSuffix(draft.Path, "router-jump.yaml") {
 		t.Fatalf("unexpected draft path: %s", draft.Path)
 	}
-	if draft.Line != 4 {
-		t.Fatalf("expected edit line 4, got %d", draft.Line)
+	if draft.Line != 2 {
+		t.Fatalf("expected edit line 2, got %d", draft.Line)
 	}
 
 	raw, err := os.ReadFile(draft.Path)
@@ -30,8 +30,8 @@ func TestCreateCommandDraft(t *testing.T) {
 	if !strings.Contains(text, "desc: router jump") {
 		t.Fatalf("expected desc in draft, got %q", text)
 	}
-	if !strings.Contains(text, "action: |") {
-		t.Fatalf("expected action scaffold, got %q", text)
+	if !strings.Contains(text, "cmd: echo \"replace with command\"") {
+		t.Fatalf("expected cmd scaffold, got %q", text)
 	}
 	if strings.Contains(text, "actions:") {
 		t.Fatalf("expected simple scaffold without actions list, got %q", text)

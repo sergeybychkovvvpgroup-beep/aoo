@@ -131,14 +131,6 @@ func previewCandidates(entry Entry) []previewCandidate {
 			score:   12,
 		})
 	}
-	if len(entry.Tags) > 0 {
-		candidates = append(candidates, previewCandidate{
-			section: "tags",
-			text:    strings.Join(entry.Tags, " "),
-			score:   8,
-		})
-	}
-
 	for _, action := range entry.ActionsList() {
 		if text := strings.TrimSpace(action.Text); text != "" {
 			candidates = append(candidates, previewCandidate{
@@ -152,13 +144,6 @@ func previewCandidates(entry Entry) []previewCandidate {
 				section: "command",
 				text:    cmd,
 				score:   30,
-			})
-		}
-		if tmpl := strings.TrimSpace(action.Template); tmpl != "" {
-			candidates = append(candidates, previewCandidate{
-				section: "template",
-				text:    tmpl,
-				score:   28,
 			})
 		}
 	}

@@ -1,9 +1,6 @@
 - desc: aoo set source
-  tags: [aoo, config]
   action: aoo set-source
 - desc: aoo config edit
-  tags: [aoo, config]
   action: aoo config
 - desc: aoo config show
-  tags: [aoo, config]
   action: aoo config show

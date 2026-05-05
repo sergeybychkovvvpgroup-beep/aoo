@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"aoo/internal/notes"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -42,8 +42,9 @@ func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 	if len(lines) < 2 {
 		t.Fatalf("expected multiline view, got %q", view)
 	}
-	if !strings.Contains(lines[len(lines)-1], "notes>") {
-		t.Fatalf("expected prompt on last line, got %q", lines[len(lines)-1])
+	lastLines := strings.Join(lines[maxInt(0, len(lines)-4):], "\n")
+	if !strings.Contains(lastLines, "esc quit") {
+		t.Fatalf("expected help block near bottom, got %q", lastLines)
 	}
 }
 
@@ -195,6 +196,31 @@ func TestStatusLineShowsEnterShowHint(t *testing.T) {
 	}
 }
 
+func TestStatusLineShowsEnterRawFileHint(t *testing.T) {
+	entry := notes.Entry{
+		Desc:       "netplan prod",
+		SourceFile: "netplan-prod.yaml",
+		SourceKind: notes.SourceKindRaw,
+		Actions: []notes.Action{{
+			Desc: "yaml",
+			Text: "network:\n  version: 2\n",
+		}},
+	}
+
+	model := PickerModel{
+		entries: []notes.Entry{entry},
+		matches: []notes.Match{{
+			Entry:  entry,
+			Label:  entry.Desc,
+			Detail: entry.DisplayValue(),
+		}},
+	}
+
+	if got := model.enterHintText(entry); got != "enter: print yaml" {
+		t.Fatalf("unexpected raw hint: %q", got)
+	}
+}
+
 func TestStatusLineShowsEnterActionsHint(t *testing.T) {
 	entry := notes.Entry{
 		Desc: "vyos chashnikovo",
@@ -241,9 +267,9 @@ func TestResultLinesRenderBadgeLineBelowSelectedEntry(t *testing.T) {
 			Label:  entry.Desc,
 			Detail: entry.DisplayValue(),
 		}},
-		cursor: 0,
-		width:  80,
-		theme:  Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		cursor:  0,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
 		options: Options{ShowPreview: true},
 	}
 
@@ -278,9 +304,9 @@ func TestResultLinesRenderBadgeLineForNonSelectedEntry(t *testing.T) {
 			{Entry: entryA, Label: entryA.Desc, Detail: entryA.DisplayValue()},
 			{Entry: entryB, Label: entryB.Desc, Detail: entryB.DisplayValue()},
 		},
-		cursor: 0,
-		width:  80,
-		theme:  Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		cursor:  0,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
 		options: Options{ShowPreview: false},
 	}
 
@@ -312,9 +338,9 @@ func TestBadgeTextCanBeDisabledIndependently(t *testing.T) {
 			Label:  entry.Desc,
 			Detail: entry.DisplayValue(),
 		}},
-		cursor: 0,
-		width:  80,
-		theme:  Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		cursor:  0,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
 		options: Options{ShowPreview: false},
 	}
 
@@ -334,7 +360,7 @@ func TestStatusLineShowsActiveHitIndexWhenMultiplePreviewHitsExist(t *testing.T)
 	}
 
 	model := PickerModel{
-		input: textInputWithValue("static"),
+		input:   textInputWithValue("static"),
 		entries: []notes.Entry{entry},
 		matches: []notes.Match{{
 			Entry:  entry,
@@ -490,12 +516,12 @@ func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {
 	}
 }
 
-func TestSelectedTemplatePreviewDoesNotDuplicateTemplatePrefix(t *testing.T) {
+func TestSelectedCommandPreviewDoesNotDuplicatePrefix(t *testing.T) {
 	entry := notes.Entry{
 		Desc: "aoo notes git add commit push",
 		Actions: []notes.Action{{
-			Desc:     "run",
-			Template: `git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m "{{message}}" && git -C {{aoo_notes_dir}} push`,
+			Desc: "run",
+			Cmd:  `git -C ~/.local/share/aoo/notes add . && git -C ~/.local/share/aoo/notes commit -m "update" && git -C ~/.local/share/aoo/notes push`,
 		}},
 	}
 
@@ -522,8 +548,8 @@ func TestSelectedTemplatePreviewDoesNotDuplicateTemplatePrefix(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 lines, got %d: %#v", len(lines), lines)
 	}
-	if strings.Contains(lines[1], "TEMPLATE |") {
-		t.Fatalf("expected selected preview without duplicated TEMPLATE prefix, got %q", lines[1])
+	if strings.Contains(lines[1], "RUN |") {
+		t.Fatalf("expected selected preview without duplicated RUN prefix, got %q", lines[1])
 	}
 }
 
@@ -533,4 +559,3 @@ func textInputWithValue(value string) textinput.Model {
 	input.SetValue(value)
 	return input
 }
-
