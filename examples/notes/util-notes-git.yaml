@@ -1,0 +1,20 @@
+- desc: notes git pull
+  tags:
+    - template
+    - notes
+    - git
+    - pull
+  template: git -C {{aoo_notes_dir}} pull --rebase
+  args: []
+- desc: notes git add commit push
+  tags:
+    - template
+    - notes
+    - git
+    - push
+  template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m {{message}} && git -C {{aoo_notes_dir}} push
+  args:
+    - name: message
+      prompt: Commit message
+      default: update notes
+      example: add new hosts

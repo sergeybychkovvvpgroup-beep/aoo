@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"aoo/internal/notes"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestEntryActionsPreferShowFirst(t *testing.T) {
@@ -31,5 +33,65 @@ func TestEntryActionsPreferShowFirst(t *testing.T) {
 	}
 	if actions[1].Label != "ssh vyos" {
 		t.Fatalf("unexpected run label: %q", actions[1].Label)
+	}
+}
+
+func TestActionHintTextShowsCommandAndTextActions(t *testing.T) {
+	model := ActionPickerModel{
+		options: Options{},
+	}
+
+	commandLabel := model.enterHintText(EntryAction{
+		Kind:  ActionRun,
+		Label: "ssh vyos",
+	})
+	if !strings.Contains(commandLabel, "enter: run command") {
+		t.Fatalf("expected command hint, got %q", commandLabel)
+	}
+
+	textLabel := model.enterHintText(EntryAction{
+		Kind:  ActionRead,
+		Label: "show note",
+	})
+	if !strings.Contains(textLabel, "enter: print note") {
+		t.Fatalf("expected text hint, got %q", textLabel)
+	}
+}
+
+func TestActionDetailLineShowsHint(t *testing.T) {
+	model := ActionPickerModel{
+		theme: Theme{HelpFG: "8"},
+		options: Options{},
+	}
+	got := model.detailLine("ssh vyos@himki", "enter: run command", 80, lipgloss.NewStyle(), lipgloss.NewStyle())
+	if !strings.Contains(got, "enter: run command") {
+		t.Fatalf("expected inline hint in detail line, got %q", got)
+	}
+}
+
+func TestActionPickerRendersHintsForAllVisibleActions(t *testing.T) {
+	entry := notes.Entry{
+		Desc: "himki",
+		Actions: []notes.Action{
+			{Desc: "show", Text: "Host notes"},
+			{Desc: "ssh vyos", Cmd: "ssh vyos@himki"},
+		},
+	}
+
+	model := ActionPickerModel{
+		entry:   entry,
+		actions: entryActions(entry),
+		width:   80,
+		height:  10,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		options: Options{},
+	}
+
+	view := model.View()
+	if !strings.Contains(view, "enter: print note") {
+		t.Fatalf("expected text hint in action picker view, got %q", view)
+	}
+	if !strings.Contains(view, "enter: run command") {
+		t.Fatalf("expected command hint in action picker view, got %q", view)
 	}
 }

@@ -100,6 +100,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) er
 		Height:      cfg.PickerHeight,
 		ShowPreview: cfg.ShowPreview,
 		Layout:      cfg.Layout,
+		SearchMode:  cfg.SearchMode,
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -195,9 +196,9 @@ func runTemplate(entry notes.Entry, action *notes.Action, stdin io.Reader, stdou
 		return err
 	}
 
-	title := entry.Desc
+	title := entry.DisplayName()
 	if strings.TrimSpace(action.Desc) != "" {
-		title = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
+		title = fmt.Sprintf("%s :: %s", entry.DisplayName(), action.Desc)
 	}
 	prepared, err := templatecmd.Prompt(title, *action, stdin, stdout, values)
 	if err != nil {
@@ -250,10 +251,10 @@ func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout
 	}
 	command := strings.TrimSpace(action.Cmd)
 	banner := strings.TrimSpace(action.Banner)
-	desc := entry.Desc
+	desc := entry.DisplayName()
 
 	if strings.TrimSpace(action.Desc) != "" {
-		desc = fmt.Sprintf("%s :: %s", entry.Desc, action.Desc)
+		desc = fmt.Sprintf("%s :: %s", entry.DisplayName(), action.Desc)
 	}
 
 	if err := promptCommandRun(desc, command, stdout); err != nil {
@@ -370,6 +371,7 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
 	fmt.Fprintf(stdout, "layout: %s\n", cfg.Layout)
+	fmt.Fprintf(stdout, "search_mode: %s\n", cfg.SearchMode)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
 	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
@@ -463,7 +465,7 @@ func openEntryInEditor(entry notes.Entry, line int, stdout, stderr io.Writer) er
 		}
 		targetLine := line
 		if targetLine <= 0 {
-			targetLine = bundled.FindEntryLine(path, entry.Desc)
+			targetLine = entry.SourceLine
 		}
 		return openPathInEditor(path, targetLine, fmt.Sprintf("aoo: update %s", filepath.Base(path)), stdout, stderr)
 	}
@@ -521,7 +523,7 @@ func printActionText(entry notes.Entry, action *notes.Action, stdout io.Writer) 
 	if action == nil {
 		return
 	}
-	fmt.Fprintln(stdout, entry.Desc)
+	fmt.Fprintln(stdout, entry.DisplayName())
 	fmt.Fprintln(stdout, strings.TrimRight(action.Text, "\n"))
 }
 
@@ -608,7 +610,7 @@ func mergeEntries(primary, secondary []notes.Entry) []notes.Entry {
 	seen := map[string]struct{}{}
 
 	appendEntry := func(entry notes.Entry) {
-		key := entry.Desc + "|" + entry.Action() + "|" + entry.DisplayValue()
+		key := entry.DisplayName() + "|" + entry.Action() + "|" + entry.DisplayValue()
 		if _, exists := seen[key]; exists {
 			return
 		}
@@ -696,8 +698,7 @@ func repoUpdateHint() (string, bool) {
 
 	checks := []string{
 		filepath.Join(repoRoot, "go.mod"),
-		filepath.Join(repoRoot, "internal", "bundled", "service.yaml"),
-		filepath.Join(repoRoot, "internal", "bundled", "command_templates.yaml"),
+		filepath.Join(repoRoot, "internal", "bundled", "notes.go"),
 	}
 
 	for _, path := range checks {
@@ -716,7 +717,7 @@ func repoUpdateHint() (string, bool) {
 func detectAooRepoRoot(start string) (string, bool) {
 	dir := start
 	for {
-		if fileExists(filepath.Join(dir, "go.mod")) && fileExists(filepath.Join(dir, "internal", "bundled", "service.yaml")) {
+		if fileExists(filepath.Join(dir, "go.mod")) && fileExists(filepath.Join(dir, "internal", "bundled", "notes.go")) {
 			return dir, true
 		}
 		parent := filepath.Dir(dir)

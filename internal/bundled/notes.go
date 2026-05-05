@@ -1,39 +1,49 @@
 package bundled
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"aoo/internal/notes"
 )
 
-//go:embed service.yaml
-var serviceYAML []byte
-
-//go:embed command_templates.yaml
-var templatesYAML []byte
-
-const (
-	serviceSourcePath   = "builtin/service.yaml"
-	templatesSourcePath = "builtin/command_templates.yaml"
-)
+//go:embed *.yaml
+var bundledFS embed.FS
 
 func Load() notes.LoadResult {
-	service := notes.LoadBytes(serviceSourcePath, serviceYAML)
-	templates := notes.LoadBytes(templatesSourcePath, templatesYAML)
-
-	return notes.LoadResult{
-		Entries: append(service.Entries, templates.Entries...),
-		Errors:  append(service.Errors, templates.Errors...),
+	files, err := fs.Glob(bundledFS, "*.yaml")
+	if err != nil {
+		return notes.LoadResult{Errors: []error{err}}
 	}
+	sort.Strings(files)
+
+	result := notes.LoadResult{}
+	for _, name := range files {
+		raw, readErr := bundledFS.ReadFile(name)
+		if readErr != nil {
+			result.Errors = append(result.Errors, readErr)
+			continue
+		}
+		loaded := notes.LoadBytes("builtin/"+name, raw)
+		result.Entries = append(result.Entries, loaded.Entries...)
+		result.Errors = append(result.Errors, loaded.Errors...)
+	}
+	return result
 }
 
 func Materialize(sourcePath string, targetDir string) (string, error) {
-	filename, content, ok := lookupBundledSource(sourcePath)
-	if !ok {
+	filename := strings.TrimSpace(strings.TrimPrefix(sourcePath, "builtin/"))
+	if filename == "" || filename == sourcePath {
+		return "", fmt.Errorf("unknown bundled source: %s", sourcePath)
+	}
+
+	content, err := bundledFS.ReadFile(filename)
+	if err != nil {
 		return "", fmt.Errorf("unknown bundled source: %s", sourcePath)
 	}
 
@@ -53,31 +63,4 @@ func Materialize(sourcePath string, targetDir string) (string, error) {
 	}
 
 	return targetPath, nil
-}
-
-func FindEntryLine(path string, desc string) int {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-
-	pattern := "- desc: " + desc
-	lines := strings.Split(string(raw), "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) == pattern {
-			return i + 1
-		}
-	}
-	return 0
-}
-
-func lookupBundledSource(sourcePath string) (string, []byte, bool) {
-	switch strings.TrimSpace(sourcePath) {
-	case serviceSourcePath:
-		return "aoo_service.yaml", serviceYAML, true
-	case templatesSourcePath:
-		return "aoo_command_templates.yaml", templatesYAML, true
-	default:
-		return "", nil, false
-	}
 }

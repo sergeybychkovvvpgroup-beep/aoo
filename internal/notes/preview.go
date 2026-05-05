@@ -110,10 +110,10 @@ func fallbackPreview(entry Entry) PreviewMatch {
 
 	return PreviewMatch{
 		Section: "entry",
-		Text:    strings.TrimSpace(entry.Desc),
+		Text:    strings.TrimSpace(entry.DisplayName()),
 		Snippets: []PreviewSnippet{{
 			Section: "entry",
-			Text:    strings.TrimSpace(entry.Desc),
+			Text:    strings.TrimSpace(entry.DisplayName()),
 		}},
 	}
 }
@@ -121,9 +121,16 @@ func fallbackPreview(entry Entry) PreviewMatch {
 func previewCandidates(entry Entry) []previewCandidate {
 	candidates := make([]previewCandidate, 0, 4+len(entry.ActionsList())*3)
 	candidates = append(candidates,
-		previewCandidate{section: "title", text: entry.Desc, score: 10},
+		previewCandidate{section: "title", text: entry.DisplayName(), score: 10},
 		previewCandidate{section: "source", text: entry.SourceFile, score: 9},
 	)
+	if entry.IsGroup() && strings.TrimSpace(entry.GroupSummary) != "" {
+		candidates = append(candidates, previewCandidate{
+			section: "group",
+			text:    entry.GroupSummary,
+			score:   12,
+		})
+	}
 	if len(entry.Tags) > 0 {
 		candidates = append(candidates, previewCandidate{
 			section: "tags",

@@ -171,37 +171,30 @@ func loadYAML(path string, raw []byte) ([]Entry, error) {
 }
 
 func validateEntry(path string, line int, entry Entry) error {
-	if strings.TrimSpace(entry.Desc) == "" {
-		return ValidationError{
-			Path:    path,
-			Problem: fmt.Sprintf("note at line %d is missing required field desc", line),
-		}
-	}
-
 	mode := strings.ToLower(strings.TrimSpace(entry.Mode))
 	if mode != "" && mode != "run" && mode != "show" {
 		return ValidationError{
 			Path:    path,
-			Problem: fmt.Sprintf("note %q at line %d has invalid mode %q, expected run or show", entry.Desc, line, entry.Mode),
+			Problem: fmt.Sprintf("note in %s at line %d has invalid mode %q, expected run or show", filepath.Base(path), line, entry.Mode),
+		}
+	}
+
+	if strings.TrimSpace(entry.Desc) == "" && strings.TrimSpace(entry.SourceFile) == "" {
+		return ValidationError{
+			Path:    path,
+			Problem: fmt.Sprintf("note in %s at line %d should have desc", filepath.Base(path), line),
 		}
 	}
 
 	if len(entry.Actions) == 0 {
 		return ValidationError{
 			Path:    path,
-			Problem: fmt.Sprintf("note %q at line %d must have at least one action", entry.Desc, line),
+			Problem: fmt.Sprintf("note in %s at line %d must have at least one action", filepath.Base(path), line),
 		}
 	}
 
 	for i, action := range entry.Actions {
 		actionLine := line
-		if strings.TrimSpace(action.Desc) == "" {
-			return ValidationError{
-				Path:    path,
-				Problem: fmt.Sprintf("note %q action %d at line %d is missing required field desc", entry.Desc, i+1, actionLine),
-			}
-		}
-
 		kinds := 0
 		if action.IsShow() {
 			kinds++
@@ -215,13 +208,13 @@ func validateEntry(path string, line int, entry Entry) error {
 		if kinds == 0 {
 			return ValidationError{
 				Path:    path,
-				Problem: fmt.Sprintf("note %q action %q at line %d must have text, cmd, or template", entry.Desc, action.Desc, actionLine),
+				Problem: fmt.Sprintf("note in %s action %d at line %d must have text, cmd, or template", filepath.Base(path), i+1, actionLine),
 			}
 		}
 		if kinds > 1 {
 			return ValidationError{
 				Path:    path,
-				Problem: fmt.Sprintf("note %q action %q at line %d must use only one of text, cmd, or template", entry.Desc, action.Desc, actionLine),
+				Problem: fmt.Sprintf("note in %s action %d at line %d must use only one of text, cmd, or template", filepath.Base(path), i+1, actionLine),
 			}
 		}
 	}
@@ -231,37 +224,70 @@ func validateEntry(path string, line int, entry Entry) error {
 
 func normalizeLegacyEntry(entry Entry) Entry {
 	if len(entry.Actions) > 0 {
+		entry.ActionCmd = strings.TrimSpace(entry.ActionCmd)
 		entry.Text = strings.TrimSpace(entry.Text)
+		entry.Note = strings.TrimSpace(entry.Note)
 		entry.Cmd = strings.TrimSpace(entry.Cmd)
+		normalized := make([]Action, 0, len(entry.Actions)+2)
+		if entry.ActionCmd != "" {
+			normalized = append(normalized, Action{
+				Cmd:    entry.ActionCmd,
+				Banner: strings.TrimSpace(entry.Banner),
+			})
+		}
+		if entry.Note != "" {
+			normalized = append(normalized, Action{
+				Desc: inferShowDesc(entry),
+				Text: entry.Note,
+			})
+		}
+		if entry.Text != "" {
+			normalized = append(normalized, Action{
+				Desc: inferShowDesc(entry),
+				Text: entry.Text,
+			})
+		}
 		for i := range entry.Actions {
 			entry.Actions[i].Desc = strings.TrimSpace(entry.Actions[i].Desc)
 			entry.Actions[i].Cmd = strings.TrimSpace(entry.Actions[i].Cmd)
 			entry.Actions[i].Text = strings.TrimSpace(entry.Actions[i].Text)
 			entry.Actions[i].Template = strings.TrimSpace(entry.Actions[i].Template)
 			entry.Actions[i].Banner = strings.TrimSpace(entry.Actions[i].Banner)
+			normalized = append(normalized, entry.Actions[i])
 		}
+		entry.Actions = normalized
+		entry.Text = ""
+		entry.Note = ""
 		return entry
 	}
 
 	actions := make([]Action, 0, 1+len(entry.Run))
+	entry.ActionCmd = strings.TrimSpace(entry.ActionCmd)
 	entry.Text = strings.TrimSpace(entry.Text)
 	entry.Cmd = strings.TrimSpace(entry.Cmd)
+	legacyDesc := strings.TrimSpace(entry.Desc)
+	if entry.ActionCmd != "" {
+		actions = append(actions, Action{
+			Cmd:    entry.ActionCmd,
+			Banner: strings.TrimSpace(entry.Banner),
+		})
+	}
 	if entry.Cmd != "" {
 		actions = append(actions, Action{
-			Desc:   inferActionDesc(entry.Cmd, "run"),
+			Desc:   legacyActionDesc(legacyDesc, inferActionDesc(entry.Cmd, "run")),
 			Cmd:    entry.Cmd,
 			Banner: strings.TrimSpace(entry.Banner),
 		})
 	}
 	if entry.Text != "" {
 		actions = append(actions, Action{
-			Desc: "show",
+			Desc: legacyActionDesc(legacyDesc, inferShowDesc(entry)),
 			Text: entry.Text,
 		})
 	}
 	if text := strings.TrimSpace(entry.Note); text != "" {
 		actions = append(actions, Action{
-			Desc: "show",
+			Desc: legacyActionDesc(legacyDesc, inferShowDesc(entry)),
 			Text: text,
 		})
 	}
@@ -282,7 +308,7 @@ func normalizeLegacyEntry(entry Entry) Entry {
 	}
 	if template := strings.TrimSpace(entry.Template); template != "" {
 		actions = append(actions, Action{
-			Desc:     inferActionDesc(template, "run"),
+			Desc:     legacyActionDesc(legacyDesc, inferActionDesc(template, "run")),
 			Template: template,
 			Args:     entry.Args,
 			Banner:   strings.TrimSpace(entry.Banner),
@@ -290,6 +316,13 @@ func normalizeLegacyEntry(entry Entry) Entry {
 	}
 	entry.Actions = actions
 	return entry
+}
+
+func legacyActionDesc(legacyDesc, fallback string) string {
+	if strings.TrimSpace(legacyDesc) != "" {
+		return strings.TrimSpace(legacyDesc)
+	}
+	return fallback
 }
 
 func inferActionDesc(command string, fallback string) string {

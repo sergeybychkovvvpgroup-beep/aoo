@@ -97,18 +97,10 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.createKind = "note"
 			return m, tea.Quit
 		case "up", "ctrl+k":
-			if m.cursor > 0 {
-				m.cursor--
-				m.previewHit = 0
-				m.refreshPreview()
-			}
+			m.moveCursor(-1)
 			return m, nil
 		case "down", "ctrl+j":
-			if m.cursor < len(m.matches)-1 {
-				m.cursor++
-				m.previewHit = 0
-				m.refreshPreview()
-			}
+			m.moveCursor(1)
 			return m, nil
 		case "right":
 			m.advancePreviewHit(1)
@@ -117,18 +109,10 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.advancePreviewHit(-1)
 			return m, nil
 		case "f3":
-			if m.cursor < len(m.matches)-1 {
-				m.cursor++
-				m.previewHit = 0
-				m.refreshPreview()
-			}
+			m.moveCursor(1)
 			return m, nil
 		case "shift+f3":
-			if m.cursor > 0 {
-				m.cursor--
-				m.previewHit = 0
-				m.refreshPreview()
-			}
+			m.moveCursor(-1)
 			return m, nil
 		}
 	}
@@ -143,11 +127,10 @@ func (m PickerModel) View() string {
 	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.RowFG))
 	selectedStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.SelectedFG)).
-		Background(lipgloss.Color(m.theme.SelectedBG)).
-		Bold(true)
+		Background(lipgloss.Color(m.theme.SelectedBG))
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DetailFG))
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG)).Bold(true)
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG))
 	inputBox := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.InputFG)).
 		Background(lipgloss.Color(m.theme.InputBG)).
@@ -161,28 +144,26 @@ func (m PickerModel) View() string {
 	lines := make([]string, 0, maxInt(6, effectiveHeight))
 
 	if m.isBottomLayout() {
+		resultBlock := []string{}
 		if strings.TrimSpace(m.input.Value()) != "" {
-			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle)...)
-			lines = append(lines, "")
-			lines = append(lines, titleStyle.Render(m.statusLine()))
+			resultBlock = append(resultBlock, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle, helpStyle)...)
+			resultBlock = append(resultBlock, "")
+			resultBlock = append(resultBlock, titleStyle.Render(m.statusLine()))
 		}
+		lines = append(lines, resultBlock...)
 		lines = append(lines, helpLine, inputLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			padding := make([]string, 0, effectiveHeight-len(lines))
 			for len(lines)+len(padding) < effectiveHeight {
 				padding = append(padding, "")
 			}
-			anchor := len(lines) - 2
-			if anchor < 0 {
-				anchor = 0
-			}
-			lines = append(lines[:anchor], append(padding, lines[anchor:]...)...)
+			lines = append(padding, lines...)
 		}
 	} else {
 		lines = append(lines, inputLine)
 		if strings.TrimSpace(m.input.Value()) != "" {
 			lines = append(lines, "")
-			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle)...)
+			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle, helpStyle)...)
 			lines = append(lines, "")
 			lines = append(lines, titleStyle.Render(m.statusLine()))
 		}
@@ -229,7 +210,7 @@ func (m PickerModel) Query() string {
 }
 
 func (m *PickerModel) refresh() {
-	m.matches = notes.Filter(m.entries, m.input.Value())
+	m.matches = notes.Filter(m.entries, m.input.Value(), m.options.SearchMode)
 	if m.cursor >= len(m.matches) {
 		m.cursor = len(m.matches) - 1
 	}
@@ -376,10 +357,7 @@ func (m PickerModel) showInlinePreview() bool {
 }
 
 func (m PickerModel) resultRowHeight() int {
-	if m.showInlinePreview() {
-		return 2
-	}
-	return 1
+	return 2
 }
 
 func (m PickerModel) statusLine() string {
@@ -397,7 +375,7 @@ func (m PickerModel) statusLine() string {
 
 func pickerHelpText() string {
 	return string([]rune{0x2191, 0x2193}) + " select  " +
-		string([]rune{0x2190, 0x2192}) + " hit  enter open  ctrl+n new  ctrl+e edit  esc quit"
+		string([]rune{0x2190, 0x2192}) + " hit  enter open  :cmd/>cmd commands  ctrl+n new  ctrl+e edit  esc quit"
 }
 
 func wrapText(value string, width int) []string {
@@ -527,13 +505,16 @@ func previewHitCount(preview notes.PreviewMatch) int {
 	return len(preview.Occurrences)
 }
 
-func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle lipgloss.Style) []string {
+func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle, hintStyle lipgloss.Style) []string {
 	if len(m.matches) == 0 {
 		return []string{detailStyle.Render("No matches")}
 	}
 
-	lines := make([]string, 0, len(m.visibleMatches())*maxInt(2, m.resultRowHeight()))
 	visible := m.visibleMatches()
+	type renderedRow struct {
+		lines []string
+	}
+	rows := make([]renderedRow, 0, len(visible))
 	for i, match := range visible {
 		index := i + m.offset()
 		entry := match.Entry
@@ -542,37 +523,51 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 			prefix = m.theme.SelectedMark + " "
 		}
 
-		badge := resultBadge(entry)
-		labelText := truncateRunes(fmt.Sprintf("%s %s", badge, match.Label), maxInt(12, width-3))
+		labelText := truncateRunes(match.Label, maxInt(12, width-3))
 		renderedLabel := rowStyle.Render(labelText)
 		if index == m.cursor {
 			renderedLabel = selectedStyle.Render(padRight(labelText, maxInt(12, width-3)))
 		}
-		lines = append(lines, prefix+renderedLabel)
+		rowLines := []string{prefix + renderedLabel}
 
-		if m.showInlinePreview() {
-			snippet := truncateRunes(match.Detail, maxInt(12, width-4))
-			if index == m.cursor && !entry.HasCmd() && !entry.IsTemplate() {
-				preview := m.cachedPreview(entry)
-				if selectedSnippet := m.inlinePreviewLine(preview, width-4, m.activePreviewHit()); selectedSnippet != "" {
-					snippet = selectedSnippet
-				}
+		snippet := match.Detail
+		if m.showInlinePreview() && index == m.cursor && !entry.HasCmd() && !entry.IsTemplate() {
+			preview := m.cachedPreview(entry)
+			if selectedSnippet := m.inlinePreviewLine(preview, width-4, m.activePreviewHit()); selectedSnippet != "" {
+				snippet = selectedSnippet
 			}
-			lines = append(lines, "    "+snippet)
 		}
+		rowLines = append(rowLines, m.detailLine(snippet, m.enterHintText(entry), width, detailStyle, hintStyle))
+		rows = append(rows, renderedRow{lines: rowLines})
+	}
+
+	lines := make([]string, 0, len(visible)*maxInt(2, m.resultRowHeight()))
+	if m.isBottomLayout() {
+		for i := len(rows) - 1; i >= 0; i-- {
+			lines = append(lines, rows[i].lines...)
+		}
+		return lines
+	}
+	for _, row := range rows {
+		lines = append(lines, row.lines...)
 	}
 	return lines
 }
 
-func resultBadge(entry notes.Entry) string {
-	switch {
-	case entry.IsTemplate():
-		return "[tpl]"
-	case entry.HasCmd():
-		return "[cmd]"
-	default:
-		return "[txt]"
+func (m *PickerModel) moveCursor(delta int) {
+	if len(m.matches) == 0 || delta == 0 {
+		return
 	}
+	target := m.cursor + delta
+	if m.isBottomLayout() {
+		target = m.cursor - delta
+	}
+	if target < 0 || target >= len(m.matches) {
+		return
+	}
+	m.cursor = target
+	m.previewHit = 0
+	m.refreshPreview()
 }
 
 func (m *PickerModel) cachedPreview(entry notes.Entry) notes.PreviewMatch {
@@ -600,7 +595,55 @@ func (m PickerModel) inlinePreviewLine(preview notes.PreviewMatch, width, active
 }
 
 func previewCacheKey(entry notes.Entry, query string) string {
-	return entry.SourcePath + "|" + entry.Desc + "|" + query
+	return entry.SourcePath + "|" + entry.DisplayName() + "|" + query
+}
+
+func (m PickerModel) detailLine(detail, hint string, width int, detailStyle, hintStyle lipgloss.Style) string {
+	contentWidth := maxInt(12, width-4)
+	detail = strings.Join(strings.Fields(strings.TrimSpace(detail)), " ")
+	hint = strings.TrimSpace(hint)
+	if hint == "" {
+		return "    " + detailStyle.Render(truncateRunes(detail, contentWidth))
+	}
+
+	hintWidth := utf8.RuneCountInString(hint)
+	detailWidth := contentWidth - hintWidth - 2
+	if detailWidth < 12 {
+		detailWidth = 12
+	}
+	left := truncateRunes(detail, detailWidth)
+	padding := contentWidth - utf8.RuneCountInString(left) - hintWidth
+	if padding < 1 {
+		padding = 1
+	}
+	return "    " + detailStyle.Render(left) + strings.Repeat(" ", padding) + hintStyle.Render(hint)
+}
+
+func (m PickerModel) enterHintText(entry notes.Entry) string {
+	if action := entry.QuickAction(); action != nil {
+		switch {
+		case action.IsShow():
+			return "enter: print note"
+		case action.IsCmd():
+			return "enter: run command"
+		case action.IsTemplate():
+			return "enter: fill template"
+		}
+	}
+
+	if entry.ActionCount() <= 1 {
+		return ""
+	}
+	if entry.HasCmd() || entry.HasTemplate() {
+		if entry.HasShow() {
+			return "enter: select action"
+		}
+		return "enter: select command"
+	}
+	if entry.HasShow() {
+		return "enter: select note"
+	}
+	return "enter: select action"
 }
 
 

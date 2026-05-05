@@ -1,0 +1,21 @@
+- desc: ssh through jump host
+  tags:
+    - template
+    - ssh
+    - jump
+  template: ssh -J {{jump_user}}@{{jump_host}} {{target_user}}@{{target_host}}
+  args:
+    - name: jump_user
+      prompt: Jump user
+      default: root
+      example: sergeyb
+    - name: jump_host
+      prompt: Jump host
+      example: 192.168.1.10
+    - name: target_user
+      prompt: Target user
+      default: root
+      example: admin
+    - name: target_host
+      prompt: Target host
+      example: 10.0.0.10

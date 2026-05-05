@@ -82,11 +82,11 @@ func scaffold(kind Kind, title string) (string, int, error) {
 			"tags: []",
 			"text: |",
 			"  what this command does",
-			"cmd: |",
+			"action: |",
 			"  echo \"replace with command\"",
 			"",
 		}
-		return strings.Join(lines, "\n"), 5, nil
+		return strings.Join(lines, "\n"), 4, nil
 	case KindNote:
 		fallthrough
 	default:
@@ -95,11 +95,18 @@ func scaffold(kind Kind, title string) (string, int, error) {
 			"tags: []",
 			"text: |",
 			"  add note here",
-			"cmd: \"\"",
 			"",
 		}
-		return strings.Join(lines, "\n"), 4, nil
+		return strings.Join(lines, "\n"), 3, nil
 	}
+}
+
+func yamlScalar(value string) (string, error) {
+	raw, err := yaml.Marshal(strings.TrimSpace(value))
+	if err != nil {
+		return "", fmt.Errorf("marshal yaml scalar: %w", err)
+	}
+	return strings.TrimSpace(string(raw)), nil
 }
 
 func uniquePath(root, base string) (string, error) {
@@ -145,12 +152,4 @@ func slugify(value string) string {
 		return "note"
 	}
 	return out
-}
-
-func yamlScalar(value string) (string, error) {
-	raw, err := yaml.Marshal(strings.TrimSpace(value))
-	if err != nil {
-		return "", fmt.Errorf("marshal yaml scalar: %w", err)
-	}
-	return strings.TrimSpace(string(raw)), nil
 }

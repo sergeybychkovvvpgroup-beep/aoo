@@ -57,6 +57,7 @@ aoo config show
 ```yaml
 full_screen: true
 picker_height: 14
+search_mode: hybrid
 show_preview: false
 preview_pane: false
 ```

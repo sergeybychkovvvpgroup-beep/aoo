@@ -19,27 +19,29 @@ const (
 )
 
 type File struct {
-	NotesDir      string `yaml:"notes_dir"`
-	NotesRepo     string `yaml:"notes_repo"`
-	AppDir        string `yaml:"app_dir"`
-	Theme         string `yaml:"theme"`
-	Layout        string `yaml:"layout"`
-	FullScreen    bool   `yaml:"full_screen"`
-	PickerHeight  int    `yaml:"picker_height"`
-	ShowPreview   bool   `yaml:"show_preview"`
-	LastRepoCheck string `yaml:"last_repo_check"`
+	NotesDir         string `yaml:"notes_dir"`
+	NotesRepo        string `yaml:"notes_repo"`
+	AppDir           string `yaml:"app_dir"`
+	Theme            string `yaml:"theme"`
+	Layout           string `yaml:"layout"`
+	SearchMode       string `yaml:"search_mode"`
+	FullScreen       bool   `yaml:"full_screen"`
+	PickerHeight     int    `yaml:"picker_height"`
+	ShowPreview      bool   `yaml:"show_preview"`
+	LastRepoCheck    string `yaml:"last_repo_check"`
 }
 
 type rawFile struct {
-	NotesDir      string `yaml:"notes_dir"`
-	NotesRepo     string `yaml:"notes_repo"`
-	AppDir        string `yaml:"app_dir"`
-	Theme         string `yaml:"theme"`
-	Layout        string `yaml:"layout"`
-	FullScreen    *bool  `yaml:"full_screen"`
-	PickerHeight  *int   `yaml:"picker_height"`
-	ShowPreview   *bool  `yaml:"show_preview"`
-	LastRepoCheck string `yaml:"last_repo_check"`
+	NotesDir         string `yaml:"notes_dir"`
+	NotesRepo        string `yaml:"notes_repo"`
+	AppDir           string `yaml:"app_dir"`
+	Theme            string `yaml:"theme"`
+	Layout           string `yaml:"layout"`
+	SearchMode       string `yaml:"search_mode"`
+	FullScreen       *bool  `yaml:"full_screen"`
+	PickerHeight     *int   `yaml:"picker_height"`
+	ShowPreview      *bool  `yaml:"show_preview"`
+	LastRepoCheck    string `yaml:"last_repo_check"`
 }
 
 type SetupRequiredError struct{}
@@ -79,11 +81,12 @@ func ConfigPath() (string, error) {
 
 func DefaultFile() File {
 	return File{
-		Theme:        "fzf-dark",
-		Layout:       "bottom",
-		FullScreen:   true,
-		PickerHeight: 14,
-		ShowPreview:  false,
+		Theme:            "fzf-dark",
+		Layout:           "bottom",
+		SearchMode:       "hybrid",
+		FullScreen:       true,
+		PickerHeight:     14,
+		ShowPreview:      false,
 	}
 }
 
@@ -120,6 +123,9 @@ func Load() (File, error) {
 	if value := strings.TrimSpace(parsed.Layout); value != "" {
 		cfg.Layout = normalizeLayout(value)
 	}
+	if value := strings.TrimSpace(parsed.SearchMode); value != "" {
+		cfg.SearchMode = normalizeSearchMode(value)
+	}
 	if parsed.FullScreen != nil {
 		cfg.FullScreen = *parsed.FullScreen
 	}
@@ -134,6 +140,12 @@ func Load() (File, error) {
 		cfg.PickerHeight = 6
 	}
 	cfg.Layout = normalizeLayout(cfg.Layout)
+	cfg.SearchMode = normalizeSearchMode(cfg.SearchMode)
+	if !strings.Contains(string(raw), "search_mode:") {
+		if err := Save(cfg); err != nil {
+			return File{}, err
+		}
+	}
 	return cfg, nil
 }
 
@@ -351,6 +363,7 @@ func renderConfig(cfg File) string {
 	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
 	cfg.Theme = strings.TrimSpace(cfg.Theme)
 	cfg.Layout = normalizeLayout(cfg.Layout)
+	cfg.SearchMode = normalizeSearchMode(cfg.SearchMode)
 	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
 	if cfg.Theme == "" {
 		cfg.Theme = DefaultFile().Theme
@@ -362,11 +375,13 @@ func renderConfig(cfg File) string {
 		"# aoo",
 		"# themes: fzf-dark, catppuccin-mocha, catppuccin-latte, dracula, nord, solarized-dark, solarized-light",
 		"# layout: top | bottom",
+		"# search_mode: flat | entry-first | hybrid",
 		"notes_dir: " + yamlScalar(cfg.NotesDir),
 		"notes_repo: " + yamlScalar(cfg.NotesRepo),
 		"app_dir: " + yamlScalar(cfg.AppDir),
 		"theme: " + yamlScalar(cfg.Theme),
 		"layout: " + yamlScalar(cfg.Layout),
+		"search_mode: " + yamlScalar(cfg.SearchMode),
 		"full_screen: " + yamlScalarBool(cfg.FullScreen),
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
 		"show_preview: " + yamlScalarBool(cfg.ShowPreview),
@@ -383,6 +398,17 @@ func normalizeLayout(value string) string {
 		return "bottom"
 	default:
 		return DefaultFile().Layout
+	}
+}
+
+func normalizeSearchMode(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "entry-first":
+		return "entry-first"
+	case "hybrid":
+		return "hybrid"
+	default:
+		return DefaultFile().SearchMode
 	}
 }
 

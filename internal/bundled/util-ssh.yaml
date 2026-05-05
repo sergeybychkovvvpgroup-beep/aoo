@@ -1,0 +1,10 @@
+- desc: ssh to host
+  tags: [ssh]
+  template: ssh {{user}}@{{host}}
+  args:
+    - name: user
+      prompt: SSH user
+      example: root
+    - name: host
+      prompt: Host or IP
+      example: 192.168.1.10

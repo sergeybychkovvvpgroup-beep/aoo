@@ -1,0 +1,11 @@
+- desc: aoo rebuild and install
+  tags: [aoo, make, update]
+  template: cd {{aoo_app_dir}} && make update
+  args: []
+- desc: aoo git add commit push
+  tags: [aoo, git, push]
+  template: cd {{aoo_app_dir}} && git add . && git commit -m "{{message}}" && git push
+  args:
+    - name: message
+      prompt: Commit message
+      example: update aoo

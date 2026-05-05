@@ -1,0 +1,24 @@
+- desc: aoo help
+  text: |-
+    aoo = terminal notes + command launcher.
+
+    Start:
+      aoo
+      aoo --query ssh
+
+    Main keys:
+      Enter = open/run
+      Ctrl+E = edit
+      Ctrl+N = new note
+      Esc = quit
+
+    Search:
+      plain query = notes/files
+      :query or >query = commands only
+
+    Settings:
+      run: aoo config
+      inspect: aoo config show
+
+    Validate notes:
+      aoo validate --dir ~/.local/share/aoo/notes

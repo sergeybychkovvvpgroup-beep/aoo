@@ -1,10 +1,18 @@
 package notes
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+)
+
+const (
+	SearchModeFlat        = "flat"
+	SearchModeEntryFirst  = "entry-first"
+	SearchModeHybrid      = "hybrid"
+	SearchModeCommandOnly = "command-only"
 )
 
 type Match struct {
@@ -14,22 +22,28 @@ type Match struct {
 	Detail string
 }
 
-func Filter(entries []Entry, query string) []Match {
-	terms := queryTerms(query)
+func Filter(entries []Entry, query, mode string) []Match {
+	resolvedMode, normalizedQuery := resolveSearchMode(mode, query)
+	candidates := entries
+	if resolvedMode == SearchModeCommandOnly {
+		candidates = commandEntries(entries)
+	}
+
+	terms := queryTerms(normalizedQuery)
 	if len(terms) == 0 {
-		matches := make([]Match, 0, len(entries))
-		for _, entry := range entries {
+		matches := make([]Match, 0, len(candidates))
+		for _, entry := range candidates {
 			matches = append(matches, Match{
 				Entry:  entry,
 				Score:  1,
 				Detail: formatDetail(entry),
 			})
 		}
-		return applyMatchLabels(matches)
+		return applyMatchLabels(matches, resolvedMode)
 	}
-	matches := make([]Match, 0, len(entries))
+	matches := make([]Match, 0, len(candidates))
 
-	for _, entry := range entries {
+	for _, entry := range candidates {
 		score, ok := scoreEntry(entry, terms)
 		if !ok {
 			continue
@@ -44,12 +58,45 @@ func Filter(entries []Entry, query string) []Match {
 
 	sort.Slice(matches, func(i, j int) bool {
 		if matches[i].Score == matches[j].Score {
-			return matches[i].Label < matches[j].Label
+			if matches[i].Entry.index == matches[j].Entry.index {
+				return matches[i].Entry.DisplayName() < matches[j].Entry.DisplayName()
+			}
+			return matches[i].Entry.index < matches[j].Entry.index
 		}
 		return matches[i].Score > matches[j].Score
 	})
 
-	return applyMatchLabels(matches)
+	return applyMatchLabels(matches, resolvedMode)
+}
+
+func resolveSearchMode(mode, query string) (string, string) {
+	normalizedMode := normalizeSearchMode(mode)
+	trimmedQuery := strings.TrimSpace(query)
+	if normalizedMode != SearchModeHybrid {
+		return normalizedMode, trimmedQuery
+	}
+
+	if trimmedQuery == "" {
+		return SearchModeEntryFirst, ""
+	}
+
+	switch trimmedQuery[0] {
+	case ':', '>':
+		return SearchModeCommandOnly, strings.TrimSpace(trimmedQuery[1:])
+	default:
+		return SearchModeEntryFirst, trimmedQuery
+	}
+}
+
+func normalizeSearchMode(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case SearchModeEntryFirst:
+		return SearchModeEntryFirst
+	case SearchModeHybrid:
+		return SearchModeHybrid
+	default:
+		return SearchModeFlat
+	}
 }
 
 func queryTerms(query string) []string {
@@ -65,24 +112,54 @@ func queryTerms(query string) []string {
 	return terms
 }
 
-func applyMatchLabels(matches []Match) []Match {
+func applyMatchLabels(matches []Match, mode string) []Match {
 	if len(matches) == 0 {
+		return matches
+	}
+
+	if mode == SearchModeCommandOnly {
+		for i := range matches {
+			label, detail := commandOnlyPresentation(matches[i].Entry)
+			matches[i].Label = label
+			matches[i].Detail = detail
+		}
 		return matches
 	}
 
 	counts := make(map[string]int, len(matches))
 	for _, match := range matches {
-		counts[normalize(match.Entry.Desc)]++
+		counts[normalize(match.Entry.DisplayName())]++
 	}
 
 	for i := range matches {
-		matches[i].Label = matches[i].Entry.Desc
-		if counts[normalize(matches[i].Entry.Desc)] > 1 {
+		matches[i].Label = matches[i].Entry.DisplayName()
+		if counts[normalize(matches[i].Entry.DisplayName())] > 1 {
 			matches[i].Label = matches[i].Entry.Title()
 		}
 	}
 
 	return matches
+}
+
+func commandOnlyPresentation(entry Entry) (string, string) {
+	action := entry.PrimaryAction()
+	if action == nil {
+		return entry.DisplayName(), formatDetail(entry)
+	}
+
+	detail := strings.TrimSpace(action.Desc)
+	if detail == "" {
+		detail = entry.DisplayName()
+	}
+
+	switch {
+	case action.IsCmd():
+		return oneLine(action.Cmd, 120), detail
+	case action.IsTemplate():
+		return oneLine(action.Template, 120), detail
+	default:
+		return entry.DisplayName(), action.DisplayValue()
+	}
 }
 
 func scoreEntry(entry Entry, terms []string) (int, bool) {
@@ -110,6 +187,9 @@ func scoreEntry(entry Entry, terms []string) (int, bool) {
 	if entry.HasCmd() {
 		total += 4
 	}
+	if entry.IsGroup() {
+		total += 6
+	}
 
 	return total, true
 }
@@ -121,11 +201,15 @@ type weightedField struct {
 
 func weightedFields(entry Entry) []weightedField {
 	fields := []weightedField{
-		{value: normalize(entry.Desc), weight: 8},
+		{value: normalize(entry.DisplayName()), weight: 8},
 		{value: normalize(strings.TrimSuffix(entry.SourceFile, filepathExt(entry.SourceFile))), weight: 7},
 		{value: normalize(strings.Join(entry.Tags, " ")), weight: 7},
+		{value: normalize(entry.Note), weight: 5},
 	}
-	for _, action := range entry.Actions {
+	if entry.IsGroup() {
+		fields = append(fields, weightedField{value: normalize(entry.GroupSummary), weight: 6})
+	}
+	for _, action := range entry.ActionsList() {
 		fields = append(fields,
 			weightedField{value: normalize(action.Desc), weight: 6},
 			weightedField{value: normalize(action.Cmd), weight: 5},
@@ -139,6 +223,165 @@ func weightedFields(entry Entry) []weightedField {
 	for _, field := range fields {
 		if field.value != "" {
 			out = append(out, field)
+		}
+	}
+	return out
+}
+
+func groupEntries(entries []Entry) []Entry {
+	type grouped struct {
+		key     string
+		entries []Entry
+	}
+
+	groups := make([]grouped, 0, len(entries))
+	indexByKey := make(map[string]int, len(entries))
+	for _, entry := range entries {
+		key := groupKey(entry)
+		if groupIndex, ok := indexByKey[key]; ok {
+			groups[groupIndex].entries = append(groups[groupIndex].entries, entry)
+			continue
+		}
+		indexByKey[key] = len(groups)
+		groups = append(groups, grouped{
+			key:     key,
+			entries: []Entry{entry},
+		})
+	}
+
+	out := make([]Entry, 0, len(groups))
+	for _, group := range groups {
+		out = append(out, buildEntryGroup(group.entries))
+	}
+	return out
+}
+
+func commandEntries(entries []Entry) []Entry {
+	out := make([]Entry, 0, len(entries))
+	for _, entry := range entries {
+		for _, action := range entry.ActionsList() {
+			if !action.IsCmd() && !action.IsTemplate() {
+				continue
+			}
+			actionCopy := action
+			desc := strings.TrimSpace(action.Desc)
+			if desc == "" {
+				desc = entry.DisplayName()
+			}
+			out = append(out, Entry{
+				Desc:       entry.DisplayName(),
+				Actions:    []Action{actionCopy},
+				Tags:       append([]string(nil), entry.Tags...),
+				SourcePath: entry.SourcePath,
+				SourceFile: entry.SourceFile,
+				SourceLine: entry.SourceLine,
+				index:      entry.index,
+				searchData: []weightedField{
+					{value: normalize(entry.DisplayName()), weight: 6},
+					{value: normalize(desc), weight: 8},
+					{value: normalize(actionCopy.Cmd), weight: 9},
+					{value: normalize(actionCopy.Template), weight: 9},
+					{value: normalize(strings.Join(entry.Tags, " ")), weight: 4},
+				},
+			})
+		}
+	}
+	return out
+}
+
+func groupKey(entry Entry) string {
+	if strings.TrimSpace(entry.SourcePath) != "" {
+		return entry.SourcePath
+	}
+	if strings.TrimSpace(entry.SourceFile) != "" {
+		return entry.SourceFile
+	}
+	return fmt.Sprintf("%s#%d", entry.DisplayName(), entry.index)
+}
+
+func buildEntryGroup(entries []Entry) Entry {
+	first := entries[0]
+	group := Entry{
+		Actions:      flattenGroupActions(entries),
+		Tags:         mergeGroupTags(entries),
+		SourcePath:   first.SourcePath,
+		SourceFile:   first.SourceFile,
+		SourceLine:   first.SourceLine,
+		GroupEntries: append([]Entry(nil), entries...),
+		GroupSummary: buildGroupSummary(entries),
+		index:        first.index,
+	}
+	group.searchData = weightedFields(group)
+	return group
+}
+
+func buildGroupSummary(entries []Entry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, minInt(2, len(entries)))
+	for i, entry := range entries {
+		if i >= 2 {
+			break
+		}
+		parts = append(parts, entry.DisplayValue())
+	}
+	summary := strings.Join(parts, " | ")
+	if len(entries) > 2 {
+		summary = fmt.Sprintf("%s (+%d more)", summary, len(entries)-2)
+	}
+	return summary
+}
+
+func flattenGroupActions(entries []Entry) []Action {
+	actions := make([]Action, 0, len(entries)*2)
+	for _, entry := range entries {
+		childActions := entry.ActionsList()
+		for i, action := range childActions {
+			actionCopy := action
+			actionCopy.Desc = groupActionLabel(entry, action, len(childActions), i)
+			actions = append(actions, actionCopy)
+		}
+	}
+	return actions
+}
+
+func groupActionLabel(entry Entry, action Action, total, index int) string {
+	base := entry.DisplayName()
+	if total <= 1 {
+		return base
+	}
+
+	suffix := strings.TrimSpace(action.Desc)
+	if suffix == "" {
+		switch {
+		case action.IsCmd():
+			suffix = fmt.Sprintf("run %d", index+1)
+		case action.IsTemplate():
+			suffix = "template"
+		case action.IsShow():
+			suffix = "show"
+		default:
+			suffix = fmt.Sprintf("action %d", index+1)
+		}
+	}
+	return base + " :: " + suffix
+}
+
+func mergeGroupTags(entries []Entry) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(entries)*2)
+	for _, entry := range entries {
+		for _, tag := range entry.Tags {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			if _, ok := seen[tag]; ok {
+				continue
+			}
+			seen[tag] = struct{}{}
+			out = append(out, tag)
 		}
 	}
 	return out
@@ -257,7 +500,6 @@ func isCloseSubsequence(span, needleLen, first int) bool {
 		return false
 	}
 
-	// Prefer matches near the start of a token to avoid noisy deep subsequences.
 	if first > maxExtra+1 {
 		return false
 	}
@@ -330,9 +572,16 @@ func filepathExt(path string) string {
 		if path[i] == '.' {
 			return path[i:]
 		}
-		if path[i] == '/' {
+		if path[i] == '/' || path[i] == '\\' {
 			break
 		}
 	}
 	return ""
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

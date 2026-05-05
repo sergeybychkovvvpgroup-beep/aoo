@@ -57,6 +57,7 @@ Useful UI settings in `config.yaml`:
 ```yaml
 full_screen: true
 picker_height: 14
+search_mode: hybrid
 show_preview: false
 preview_pane: false
 ```
@@ -98,18 +99,21 @@ Both commands create a YAML scaffold, open it in `$VISUAL` / `$EDITOR`, and afte
 ```yaml
 - desc: example ssh
   text: main host access
-  cmd: ssh admin@example.local
+  action: ssh admin@example.local
 
 - desc: example url
   text: https://service.example.local
+
+- desc: example command
+  action: ssh admin@example.local
 
 - desc: example nmap template
   tags: [nmap, scan]
   template: sudo nmap -O {{host}}
   args:
-    - name: host
-      prompt: Host or IP
-      example: 192.168.1.1
+  - name: host
+    prompt: Host or IP
+    example: 192.168.1.1
 ```
 
 Behavior:
@@ -123,6 +127,9 @@ Behavior:
 - `template` asks for args, renders the final command, and runs it immediately
 - `full_screen: true` uses the terminal alternate screen and full terminal height
 - when `full_screen: false`, picker height is limited by `picker_height`, so prior terminal output stays visible
+- `search_mode: flat` keeps the old behavior and shows individual matching notes/commands
+- `search_mode: entry-first` groups matching entries from one YAML file into one result and shows commands after `Enter`
+- `search_mode: hybrid` behaves like `entry-first`, but `:query` or `>query` switches to direct flat search
 - `show_preview: false` makes each search result a single line
 - `preview_pane: true` shows a right-side preview panel like `fzf`
 - keep one note = one main thing whenever possible
@@ -136,8 +143,7 @@ Built-in template variables:
 Config command example:
 
 ```yaml
-- desc: edit aoo config
-  cmd: $EDITOR {{aoo_config_file}}
+- action: $EDITOR {{aoo_config_file}}
 ```
 
 ## Themes

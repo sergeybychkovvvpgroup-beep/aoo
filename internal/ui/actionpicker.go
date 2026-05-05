@@ -84,19 +84,18 @@ func (m ActionPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m ActionPickerModel) View() string {
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG)).Bold(true)
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG))
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DetailFG))
 	rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.RowFG))
 	selectedStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.SelectedFG)).
-		Background(lipgloss.Color(m.theme.SelectedBG)).
-		Bold(true)
+		Background(lipgloss.Color(m.theme.SelectedBG))
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
 	dividerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DividerFG))
 	contentWidth := m.contentWidth()
 
 	lines := []string{
-		titleStyle.Render(truncateRunes(m.entry.Desc, maxInt(20, contentWidth))),
+		titleStyle.Render(truncateRunes(m.entry.DisplayName(), maxInt(20, contentWidth))),
 		detailStyle.Render(fmt.Sprintf("%d actions", len(m.actions))),
 		"",
 	}
@@ -111,7 +110,7 @@ func (m ActionPickerModel) View() string {
 			label = selectedStyle.Render(padRight(labelText, contentWidth-3))
 		}
 		lines = append(lines, prefix+label)
-		lines = append(lines, "    "+detailStyle.Render(truncateRunes(action.Detail, maxInt(12, contentWidth-4))))
+		lines = append(lines, m.detailLine(action.Detail, m.enterHintText(action), contentWidth, detailStyle, helpStyle))
 		if i != len(visible)-1 {
 			lines = append(lines, "    "+dividerStyle.Render("·"))
 		}
@@ -284,6 +283,39 @@ func oneLineOrFallback(value, fallback string) string {
 		return fallback
 	}
 	return truncateRunes(strings.Join(strings.Fields(text), " "), 90)
+}
+
+func (m ActionPickerModel) enterHintText(action EntryAction) string {
+	switch action.Kind {
+	case ActionRead:
+		return "enter: print note"
+	case ActionRun:
+		return "enter: run command"
+	case ActionTemplate:
+		return "enter: fill template"
+	}
+	return ""
+}
+
+func (m ActionPickerModel) detailLine(detail, hint string, width int, detailStyle, hintStyle lipgloss.Style) string {
+	contentWidth := maxInt(12, width-4)
+	detail = strings.Join(strings.Fields(strings.TrimSpace(detail)), " ")
+	hint = strings.TrimSpace(hint)
+	if hint == "" {
+		return "    " + detailStyle.Render(truncateRunes(detail, contentWidth))
+	}
+
+	hintWidth := len([]rune(hint))
+	detailWidth := contentWidth - hintWidth - 2
+	if detailWidth < 12 {
+		detailWidth = 12
+	}
+	left := truncateRunes(detail, detailWidth)
+	padding := contentWidth - len([]rune(left)) - hintWidth
+	if padding < 1 {
+		padding = 1
+	}
+	return "    " + detailStyle.Render(left) + strings.Repeat(" ", padding) + hintStyle.Render(hint)
 }
 
 func minInt(a, b int) int {

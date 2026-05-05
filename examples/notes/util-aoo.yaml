@@ -1,0 +1,20 @@
+- desc: aoo rebuild and install
+  tags:
+    - template
+    - aoo
+    - build
+    - install
+  template: make -C {{aoo_app_dir}} build && sudo make -C {{aoo_app_dir}} install
+  args: []
+- desc: aoo git add commit push
+  tags:
+    - template
+    - aoo
+    - git
+    - push
+  template: git -C {{aoo_app_dir}} add . && git -C {{aoo_app_dir}} commit -m {{message}} && git -C {{aoo_app_dir}} push
+  args:
+    - name: message
+      prompt: Commit message
+      default: update
+      example: tweak search ranking

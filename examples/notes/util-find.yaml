@@ -1,0 +1,15 @@
+- desc: find files by name pattern
+  tags:
+    - template
+    - find
+    - files
+  template: find {{path}} -type f -name {{pattern}}
+  args:
+    - name: path
+      prompt: Path
+      default: .
+      example: /etc
+    - name: pattern
+      prompt: File name pattern
+      default: '*.yaml'
+      example: '*.conf'

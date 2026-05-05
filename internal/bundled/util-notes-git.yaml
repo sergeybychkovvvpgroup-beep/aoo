@@ -1,0 +1,11 @@
+- desc: aoo notes git pull
+  tags: [notes, git, pull]
+  template: git -C {{aoo_notes_dir}} pull --rebase
+  args: []
+- desc: aoo notes git add commit push
+  tags: [notes, git, push]
+  template: git -C {{aoo_notes_dir}} add . && git -C {{aoo_notes_dir}} commit -m "{{message}}" && git -C {{aoo_notes_dir}} push
+  args:
+    - name: message
+      prompt: Commit message
+      example: update notes

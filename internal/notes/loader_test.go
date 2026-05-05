@@ -93,7 +93,7 @@ func TestLoadBytesAcceptsLiteFields(t *testing.T) {
 	result := LoadBytes("notes.yaml", []byte(`
 - desc: router ssh
   text: main access
-  cmd: ssh root@router
+  action: ssh root@router
 `))
 
 	if len(result.Errors) != 0 {
@@ -105,6 +105,9 @@ func TestLoadBytesAcceptsLiteFields(t *testing.T) {
 	}
 	if action := entry.QuickAction(); action == nil || !action.IsCmd() {
 		t.Fatalf("expected quick action to prefer cmd, got %#v", action)
+	}
+	if got := entry.ActionsList()[0].Desc; got != "" {
+		t.Fatalf("expected canonical action field to avoid duplicated desc, got %q", got)
 	}
 }
 

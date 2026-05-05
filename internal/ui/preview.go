@@ -218,8 +218,7 @@ func renderPreviewLine(line previewLine, section string, theme Theme) string {
 	commentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.TitleDimFG))
 	matchStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.SelectedFG)).
-		Background(lipgloss.Color(theme.SelectedBG)).
-		Bold(true)
+		Background(lipgloss.Color(theme.SelectedBG))
 
 	runes := []rune(line.text)
 	styleIDs := make([]int, len(runes))

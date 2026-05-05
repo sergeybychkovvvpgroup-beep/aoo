@@ -114,22 +114,44 @@ func (r *RunCommands) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type Entry struct {
-	Desc       string      `yaml:"desc"`
-	Text       string      `yaml:"text"`
-	Cmd        string      `yaml:"cmd"`
-	Mode       string      `yaml:"mode"`
-	Actions    []Action    `yaml:"actions"`
-	Run        RunCommands `yaml:"run"`
-	Template   string      `yaml:"template"`
-	Args       []Arg       `yaml:"args"`
-	Note       string      `yaml:"note"`
-	Banner     string      `yaml:"banner"`
-	Tags       []string    `yaml:"tags"`
-	SourcePath string      `yaml:"-"`
-	SourceFile string      `yaml:"-"`
-	SourceLine int         `yaml:"-"`
+	Desc         string      `yaml:"desc"`
+	ActionCmd    string      `yaml:"action"`
+	Text         string      `yaml:"text"`
+	Cmd          string      `yaml:"cmd"`
+	Mode         string      `yaml:"mode"`
+	Actions      []Action    `yaml:"actions"`
+	Run          RunCommands `yaml:"run"`
+	Template     string      `yaml:"template"`
+	Args         []Arg       `yaml:"args"`
+	Note         string      `yaml:"note"`
+	Banner       string      `yaml:"banner"`
+	Tags         []string    `yaml:"tags"`
+	SourcePath   string      `yaml:"-"`
+	SourceFile   string      `yaml:"-"`
+	SourceLine   int         `yaml:"-"`
+	GroupEntries []Entry     `yaml:"-"`
+	GroupSummary string      `yaml:"-"`
 	searchData []weightedField `yaml:"-"`
 	index      int
+}
+
+func (e Entry) IsGroup() bool {
+	return len(e.GroupEntries) > 0
+}
+
+func (e Entry) DisplayName() string {
+	if strings.TrimSpace(e.Desc) != "" {
+		return strings.TrimSpace(e.Desc)
+	}
+	if e.IsGroup() {
+		if name := displayNameFromFile(e.SourceFile); name != "" {
+			return name
+		}
+	}
+	if name := displayNameFromFile(e.SourceFile); name != "" {
+		return name
+	}
+	return "note"
 }
 
 func (e Entry) PreviewHitLine(preview PreviewMatch, hitIndex int) int {
@@ -172,7 +194,7 @@ func (e Entry) HasShow() bool {
 }
 
 func (e Entry) HasNote() bool {
-	return e.HasShow()
+	return strings.TrimSpace(e.Note) != "" || e.HasShow()
 }
 
 func (e Entry) HasCmd() bool {
@@ -274,6 +296,8 @@ func (e Entry) FirstShowAction() *Action {
 func (e Entry) Action() string {
 	if e.IsLite() {
 		switch {
+		case strings.TrimSpace(e.ActionCmd) != "":
+			return "RUN"
 		case strings.TrimSpace(e.Cmd) != "":
 			return "RUN"
 		case strings.TrimSpace(e.Template) != "":
@@ -305,8 +329,17 @@ func (e Entry) Action() string {
 }
 
 func (e Entry) DisplayValue() string {
+	if e.IsGroup() {
+		if strings.TrimSpace(e.GroupSummary) != "" {
+			return oneLine(e.GroupSummary, 90)
+		}
+		return fmt.Sprintf("%d entries", len(e.GroupEntries))
+	}
+
 	if e.IsLite() {
 		switch {
+		case strings.TrimSpace(e.ActionCmd) != "":
+			return oneLine(e.ActionCmd, 90)
 		case strings.TrimSpace(e.Cmd) != "":
 			return oneLine(e.Cmd, 90)
 		case strings.TrimSpace(e.Template) != "":
@@ -328,12 +361,18 @@ func (e Entry) DisplayValue() string {
 }
 
 func (e Entry) Title() string {
-	base := strings.TrimSuffix(e.SourceFile, filepath.Ext(e.SourceFile))
-	return fmt.Sprintf("%s [%s]", e.Desc, base)
+	source := strings.TrimSpace(e.SourceFile)
+	if source == "" {
+		return e.DisplayName()
+	}
+	return fmt.Sprintf("%s [%s]", e.DisplayName(), source)
 }
 
 func (e Entry) SearchFields() []string {
-	fields := []string{e.Desc, e.SourceFile, e.Text, e.Cmd}
+	fields := []string{e.DisplayName(), e.SourceFile, e.Note, e.Text, e.ActionCmd, e.Cmd}
+	if e.IsGroup() {
+		fields = append(fields, e.GroupSummary)
+	}
 	for _, action := range e.normalizedActions() {
 		fields = append(fields, action.Desc, action.Cmd, action.Text, action.Template, action.Banner)
 		for _, arg := range action.Args {
@@ -352,30 +391,59 @@ func oneLine(text string, limit int) string {
 	return text[:limit-3] + "..."
 }
 
+func displayNameFromFile(sourceFile string) string {
+	base := strings.TrimSuffix(strings.TrimSpace(sourceFile), filepath.Ext(sourceFile))
+	if base == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer("-", " ", "_", " ", ".", " ")
+	return strings.Join(strings.Fields(replacer.Replace(base)), " ")
+}
+
 func (e Entry) IsLite() bool {
-	return strings.TrimSpace(e.Text) != "" || strings.TrimSpace(e.Cmd) != "" || strings.TrimSpace(e.Template) != ""
+	if e.IsGroup() {
+		return false
+	}
+	return strings.TrimSpace(e.Text) != "" || strings.TrimSpace(e.Note) != "" || strings.TrimSpace(e.ActionCmd) != "" || strings.TrimSpace(e.Cmd) != "" || strings.TrimSpace(e.Template) != ""
 }
 
 func (e Entry) QuickAction() *Action {
+	if e.IsGroup() {
+		actions := e.normalizedActions()
+		if len(actions) == 1 {
+			return &actions[0]
+		}
+		return nil
+	}
 	if e.IsLite() {
 		switch {
+		case strings.TrimSpace(e.ActionCmd) != "":
+			return &Action{
+				Cmd:    strings.TrimSpace(e.ActionCmd),
+				Banner: strings.TrimSpace(e.Banner),
+			}
 		case strings.TrimSpace(e.Cmd) != "":
 			return &Action{
-				Desc:   inferActionDesc(e.Cmd, "run"),
+				Desc:   legacyEntryActionDesc(e, inferActionDesc(e.Cmd, "run")),
 				Cmd:    strings.TrimSpace(e.Cmd),
 				Banner: strings.TrimSpace(e.Banner),
 			}
 		case strings.TrimSpace(e.Template) != "":
 			return &Action{
-				Desc:     inferActionDesc(e.Template, "run"),
+				Desc:     legacyEntryActionDesc(e, inferActionDesc(e.Template, "run")),
 				Template: strings.TrimSpace(e.Template),
 				Args:     e.Args,
 				Banner:   strings.TrimSpace(e.Banner),
 			}
 		case strings.TrimSpace(e.Text) != "":
 			return &Action{
-				Desc: "show",
+				Desc: inferShowDesc(e),
 				Text: strings.TrimSpace(e.Text),
+			}
+		case strings.TrimSpace(e.Note) != "":
+			return &Action{
+				Desc: inferShowDesc(e),
+				Text: strings.TrimSpace(e.Note),
 			}
 		}
 	}
@@ -389,26 +457,46 @@ func (e Entry) QuickAction() *Action {
 
 func (e Entry) normalizedActions() []Action {
 	if len(e.Actions) > 0 {
-		return e.Actions
+		actions := make([]Action, 0, len(e.Actions)+2)
+		if text := strings.TrimSpace(e.Note); text != "" {
+			actions = append(actions, Action{
+				Desc: inferShowDesc(e),
+				Text: text,
+			})
+		}
+		if text := strings.TrimSpace(e.Text); text != "" {
+			actions = append(actions, Action{
+				Desc: inferShowDesc(e),
+				Text: text,
+			})
+		}
+		actions = append(actions, e.Actions...)
+		return actions
 	}
 
 	actions := make([]Action, 0, 1+len(e.Run)+2)
+	if cmd := strings.TrimSpace(e.ActionCmd); cmd != "" {
+		actions = append(actions, Action{
+			Cmd:    cmd,
+			Banner: strings.TrimSpace(e.Banner),
+		})
+	}
 	if cmd := strings.TrimSpace(e.Cmd); cmd != "" {
 		actions = append(actions, Action{
-			Desc:   inferActionDesc(cmd, "run"),
+			Desc:   legacyEntryActionDesc(e, inferActionDesc(cmd, "run")),
 			Cmd:    cmd,
 			Banner: strings.TrimSpace(e.Banner),
 		})
 	}
 	if text := strings.TrimSpace(e.Text); text != "" {
 		actions = append(actions, Action{
-			Desc: "show",
+			Desc: inferShowDesc(e),
 			Text: text,
 		})
 	}
 	if text := strings.TrimSpace(e.Note); text != "" {
 		actions = append(actions, Action{
-			Desc: "show",
+			Desc: inferShowDesc(e),
 			Text: text,
 		})
 	}
@@ -429,11 +517,25 @@ func (e Entry) normalizedActions() []Action {
 	}
 	if template := strings.TrimSpace(e.Template); template != "" {
 		actions = append(actions, Action{
-			Desc:     inferActionDesc(template, "template"),
+			Desc:     legacyEntryActionDesc(e, inferActionDesc(template, "template")),
 			Template: template,
 			Args:     e.Args,
 			Banner:   strings.TrimSpace(e.Banner),
 		})
 	}
 	return actions
+}
+
+func inferShowDesc(e Entry) string {
+	if strings.TrimSpace(e.Desc) != "" {
+		return strings.TrimSpace(e.Desc)
+	}
+	return "show"
+}
+
+func legacyEntryActionDesc(e Entry, fallback string) string {
+	if strings.TrimSpace(e.Desc) != "" {
+		return strings.TrimSpace(e.Desc)
+	}
+	return fallback
 }
