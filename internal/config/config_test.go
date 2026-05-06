@@ -83,8 +83,11 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !cfg.FullScreen {
 		t.Fatal("expected full screen default to be true")
 	}
-	if cfg.ShowPreview {
-		t.Fatal("expected show preview default to be false")
+	if cfg.ShowMatchContext {
+		t.Fatal("expected show match context default to be false")
+	}
+	if cfg.ShowListOnStart {
+		t.Fatal("expected show list on start default to be false")
 	}
 
 	path, err := ConfigPath()
@@ -111,8 +114,11 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
 	}
-	if !strings.Contains(text, "show_preview: false") {
-		t.Fatalf("expected show preview in config, got %q", text)
+	if !strings.Contains(text, "show_match_context: false") {
+		t.Fatalf("expected show_match_context in config, got %q", text)
+	}
+	if !strings.Contains(text, "show_list_on_start: false") {
+		t.Fatalf("expected show_list_on_start in config, got %q", text)
 	}
 }
 
@@ -134,7 +140,8 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 		"layout: bottom",
 		"full_screen: true",
 		"picker_height: 14",
-		"show_preview: false",
+		"show_match_context: false",
+		"show_list_on_start: true",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
@@ -148,6 +155,9 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	if cfg.Layout != "bottom" {
 		t.Fatalf("expected bottom layout, got %q", cfg.Layout)
 	}
+	if !cfg.ShowListOnStart {
+		t.Fatal("expected show_list_on_start to be loaded from config")
+	}
 
 	updated, err := os.ReadFile(path)
 	if err != nil {
@@ -155,5 +165,62 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	}
 	if strings.Contains(string(updated), "search_mode:") {
 		t.Fatalf("expected config file without search_mode, got %q", string(updated))
+	}
+	if !strings.Contains(string(updated), "show_match_context: false") {
+		t.Fatalf("expected rewritten config to contain show_match_context, got %q", string(updated))
+	}
+	if !strings.Contains(string(updated), "show_list_on_start: true") {
+		t.Fatalf("expected rewritten config to contain show_list_on_start, got %q", string(updated))
+	}
+}
+
+func TestLoadAcceptsLegacyPreviewKeys(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	raw := strings.Join([]string{
+		"show_preview: true",
+		"show_notes_on_start: true",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ShowMatchContext {
+		t.Fatal("expected legacy show_preview to map to show_match_context")
+	}
+	if !cfg.ShowListOnStart {
+		t.Fatal("expected legacy show_notes_on_start to map to show_list_on_start")
+	}
+
+	updated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(updated)
+	if strings.Contains(text, "show_preview:") {
+		t.Fatalf("expected legacy show_preview key to be removed, got %q", text)
+	}
+	if strings.Contains(text, "show_notes_on_start:") {
+		t.Fatalf("expected legacy show_notes_on_start key to be removed, got %q", text)
+	}
+	if !strings.Contains(text, "show_match_context: true") {
+		t.Fatalf("expected migrated show_match_context key, got %q", text)
+	}
+	if !strings.Contains(text, "show_list_on_start: true") {
+		t.Fatalf("expected migrated show_list_on_start key, got %q", text)
 	}
 }

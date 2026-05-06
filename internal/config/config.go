@@ -15,31 +15,30 @@ const (
 	envNotesDir       = "AOO_NOTES_DIR"
 	legacyEnvNotesDir = "TERM_NOTES_DIR"
 	envTheme          = "AOO_THEME"
-	envAppDir         = "AOO_APP_DIR"
 )
 
 type File struct {
-	NotesDir      string `yaml:"notes_dir"`
-	NotesRepo     string `yaml:"notes_repo"`
-	AppDir        string `yaml:"app_dir"`
-	Theme         string `yaml:"theme"`
-	Layout        string `yaml:"layout"`
-	FullScreen    bool   `yaml:"full_screen"`
-	PickerHeight  int    `yaml:"picker_height"`
-	ShowPreview   bool   `yaml:"show_preview"`
-	LastRepoCheck string `yaml:"last_repo_check"`
+	NotesDir         string `yaml:"notes_dir"`
+	NotesRepo        string `yaml:"notes_repo"`
+	Theme            string `yaml:"theme"`
+	Layout           string `yaml:"layout"`
+	FullScreen       bool   `yaml:"full_screen"`
+	PickerHeight     int    `yaml:"picker_height"`
+	ShowMatchContext bool   `yaml:"show_match_context"`
+	ShowListOnStart  bool   `yaml:"show_list_on_start"`
 }
 
 type rawFile struct {
-	NotesDir      string `yaml:"notes_dir"`
-	NotesRepo     string `yaml:"notes_repo"`
-	AppDir        string `yaml:"app_dir"`
-	Theme         string `yaml:"theme"`
-	Layout        string `yaml:"layout"`
-	FullScreen    *bool  `yaml:"full_screen"`
-	PickerHeight  *int   `yaml:"picker_height"`
-	ShowPreview   *bool  `yaml:"show_preview"`
-	LastRepoCheck string `yaml:"last_repo_check"`
+	NotesDir            string `yaml:"notes_dir"`
+	NotesRepo           string `yaml:"notes_repo"`
+	Theme               string `yaml:"theme"`
+	Layout              string `yaml:"layout"`
+	FullScreen          *bool  `yaml:"full_screen"`
+	PickerHeight        *int   `yaml:"picker_height"`
+	ShowMatchContext    *bool  `yaml:"show_match_context"`
+	ShowListOnStart     *bool  `yaml:"show_list_on_start"`
+	LegacyShowPreview   *bool  `yaml:"show_preview"`
+	LegacyShowNotesList *bool  `yaml:"show_notes_on_start"`
 }
 
 type SetupRequiredError struct{}
@@ -79,11 +78,12 @@ func ConfigPath() (string, error) {
 
 func DefaultFile() File {
 	return File{
-		Theme:        "fzf-dark",
-		Layout:       "bottom",
-		FullScreen:   true,
-		PickerHeight: 14,
-		ShowPreview:  false,
+		Theme:            "fzf-dark",
+		Layout:           "bottom",
+		FullScreen:       true,
+		PickerHeight:     14,
+		ShowMatchContext: false,
+		ShowListOnStart:  false,
 	}
 }
 
@@ -113,7 +113,6 @@ func Load() (File, error) {
 
 	cfg.NotesDir = strings.TrimSpace(parsed.NotesDir)
 	cfg.NotesRepo = strings.TrimSpace(parsed.NotesRepo)
-	cfg.AppDir = strings.TrimSpace(parsed.AppDir)
 	if value := strings.TrimSpace(parsed.Theme); value != "" {
 		cfg.Theme = value
 	}
@@ -126,14 +125,25 @@ func Load() (File, error) {
 	if parsed.PickerHeight != nil {
 		cfg.PickerHeight = *parsed.PickerHeight
 	}
-	if parsed.ShowPreview != nil {
-		cfg.ShowPreview = *parsed.ShowPreview
+	if parsed.ShowMatchContext != nil {
+		cfg.ShowMatchContext = *parsed.ShowMatchContext
+	} else if parsed.LegacyShowPreview != nil {
+		cfg.ShowMatchContext = *parsed.LegacyShowPreview
 	}
-	cfg.LastRepoCheck = strings.TrimSpace(parsed.LastRepoCheck)
+	if parsed.ShowListOnStart != nil {
+		cfg.ShowListOnStart = *parsed.ShowListOnStart
+	} else if parsed.LegacyShowNotesList != nil {
+		cfg.ShowListOnStart = *parsed.LegacyShowNotesList
+	}
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = 6
 	}
 	cfg.Layout = normalizeLayout(cfg.Layout)
+	if configNeedsRewrite(raw, cfg) {
+		if err := Save(cfg); err != nil {
+			return File{}, err
+		}
+	}
 	return cfg, nil
 }
 
@@ -227,73 +237,6 @@ func SetNotesRepo(repo string) error {
 	return Save(cfg)
 }
 
-func SetLastRepoCheck(value string) error {
-	cfg, err := Load()
-	if err != nil {
-		return err
-	}
-	cfg.LastRepoCheck = strings.TrimSpace(value)
-	return Save(cfg)
-}
-
-func ResolveAppDir(cliValue string) (string, string, error) {
-	if value := strings.TrimSpace(cliValue); value != "" {
-		path, err := filepath.Abs(value)
-		return path, "flag --app-dir", err
-	}
-
-	if value := strings.TrimSpace(os.Getenv(envAppDir)); value != "" {
-		path, err := filepath.Abs(value)
-		return path, envAppDir, err
-	}
-
-	cfg, err := Load()
-	if err != nil {
-		return "", "", err
-	}
-
-	if value := strings.TrimSpace(cfg.AppDir); value != "" {
-		path, err := filepath.Abs(value)
-		return path, "config", err
-	}
-
-	cwd, err := os.Getwd()
-	if err == nil {
-		if _, statErr := os.Stat(filepath.Join(cwd, "go.mod")); statErr == nil {
-			return cwd, "current directory", nil
-		}
-	}
-
-	return "", "", nil
-}
-
-func SetAppDir(dir string) (string, error) {
-	path, err := filepath.Abs(strings.TrimSpace(dir))
-	if err != nil {
-		return "", err
-	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", fmt.Errorf("check app dir %s: %w", path, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%s is not a directory", path)
-	}
-
-	cfg, err := Load()
-	if err != nil {
-		return "", err
-	}
-	cfg.AppDir = path
-
-	if err := Save(cfg); err != nil {
-		return "", err
-	}
-
-	return path, nil
-}
-
 func ResolveTheme(cliValue string) (string, string, error) {
 	if value := strings.TrimSpace(cliValue); value != "" {
 		return value, "flag --theme", nil
@@ -348,10 +291,8 @@ func hasVisibleYAML(matches []string) bool {
 func renderConfig(cfg File) string {
 	cfg.NotesDir = strings.TrimSpace(cfg.NotesDir)
 	cfg.NotesRepo = strings.TrimSpace(cfg.NotesRepo)
-	cfg.AppDir = strings.TrimSpace(cfg.AppDir)
 	cfg.Theme = strings.TrimSpace(cfg.Theme)
 	cfg.Layout = normalizeLayout(cfg.Layout)
-	cfg.LastRepoCheck = strings.TrimSpace(cfg.LastRepoCheck)
 	if cfg.Theme == "" {
 		cfg.Theme = DefaultFile().Theme
 	}
@@ -364,15 +305,43 @@ func renderConfig(cfg File) string {
 		"# layout: top | bottom",
 		"notes_dir: " + yamlScalar(cfg.NotesDir),
 		"notes_repo: " + yamlScalar(cfg.NotesRepo),
-		"app_dir: " + yamlScalar(cfg.AppDir),
 		"theme: " + yamlScalar(cfg.Theme),
 		"layout: " + yamlScalar(cfg.Layout),
 		"full_screen: " + yamlScalarBool(cfg.FullScreen),
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
-		"show_preview: " + yamlScalarBool(cfg.ShowPreview),
+		"show_match_context: " + yamlScalarBool(cfg.ShowMatchContext),
+		"show_list_on_start: " + yamlScalarBool(cfg.ShowListOnStart),
 		"",
 	}
 	return strings.Join(lines, "\n")
+}
+
+func configNeedsRewrite(raw []byte, cfg File) bool {
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	legacyMarkers := []string{
+		"app_dir:",
+		"last_repo_check:",
+		"search_mode:",
+		"show_preview:",
+		"show_notes_on_start:",
+		"# search_mode:",
+	}
+	for _, marker := range legacyMarkers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+
+	if !strings.Contains(text, "show_match_context:") {
+		return true
+	}
+	if !strings.Contains(text, "show_list_on_start:") {
+		return true
+	}
+
+	current := strings.TrimSpace(text)
+	expected := strings.TrimSpace(renderConfig(cfg))
+	return current != expected
 }
 
 func normalizeLayout(value string) string {

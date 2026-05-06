@@ -48,6 +48,42 @@ func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 	}
 }
 
+func TestViewHidesResultsOnEmptyQueryByDefault(t *testing.T) {
+	model := PickerModel{
+		input: textInputWithValue(""),
+		matches: []notes.Match{
+			{Entry: notes.Entry{Desc: "router notes"}, Label: "router notes", Detail: "dhcp"},
+		},
+		height:  8,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
+		options: Options{Layout: "bottom"},
+	}
+
+	view := model.View()
+	if strings.Contains(view, "router notes") {
+		t.Fatalf("expected no visible notes on empty query by default, got %q", view)
+	}
+}
+
+func TestViewShowsResultsOnEmptyQueryWhenEnabled(t *testing.T) {
+	model := PickerModel{
+		input: textInputWithValue(""),
+		matches: []notes.Match{
+			{Entry: notes.Entry{Desc: "router notes"}, Label: "router notes", Detail: "dhcp"},
+		},
+		height:  8,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
+		options: Options{Layout: "bottom", ShowListOnStart: true},
+	}
+
+	view := model.View()
+	if !strings.Contains(view, "router notes") {
+		t.Fatalf("expected visible notes on empty query, got %q", view)
+	}
+}
+
 func TestBottomLayoutRendersFirstResultAtBottomOfResultBlock(t *testing.T) {
 	model := PickerModel{
 		input: textInputWithValue("vyos"),
@@ -270,7 +306,7 @@ func TestResultLinesRenderBadgeLineBelowSelectedEntry(t *testing.T) {
 		cursor:  0,
 		width:   80,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
-		options: Options{ShowPreview: true},
+		options: Options{ShowMatchContext: true},
 	}
 
 	lines := model.resultLines(80, lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle())
@@ -307,7 +343,7 @@ func TestResultLinesRenderBadgeLineForNonSelectedEntry(t *testing.T) {
 		cursor:  0,
 		width:   80,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
-		options: Options{ShowPreview: false},
+		options: Options{ShowMatchContext: false},
 	}
 
 	lines := model.resultLines(80, lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle())
@@ -341,7 +377,7 @@ func TestBadgeTextCanBeDisabledIndependently(t *testing.T) {
 		cursor:  0,
 		width:   80,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
-		options: Options{ShowPreview: false},
+		options: Options{ShowMatchContext: false},
 	}
 
 	got := model.enterHintText(entry)
@@ -368,7 +404,7 @@ func TestStatusLineShowsActiveHitIndexWhenMultiplePreviewHitsExist(t *testing.T)
 			Detail: entry.DisplayValue(),
 		}},
 		previewHit: 1,
-		options:    Options{ShowPreview: true},
+		options:    Options{ShowMatchContext: true},
 	}
 	model.preview = notes.BuildPreview(entry, "static")
 
@@ -394,7 +430,7 @@ func TestStatusLineHidesHitIndexWhenPreviewLineIsDisabled(t *testing.T) {
 			Detail: entry.DisplayValue(),
 		}},
 		previewHit: 1,
-		options:    Options{ShowPreview: false},
+		options:    Options{ShowMatchContext: false},
 	}
 	model.preview = notes.BuildPreview(entry, "static")
 
@@ -421,7 +457,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForSelectedEntry(t *testin
 		}},
 		cursor:  0,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
-		options: Options{ShowPreview: true},
+		options: Options{ShowMatchContext: true},
 	}
 	model.preview = notes.BuildPreview(entry, "start")
 
@@ -455,7 +491,7 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForCmdOnlyEntry(t *testing
 		}},
 		cursor:  0,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
-		options: Options{ShowPreview: true},
+		options: Options{ShowMatchContext: true},
 	}
 	model.preview = notes.BuildPreview(entry, "git")
 
@@ -497,7 +533,7 @@ func TestSelectedPreviewLineUsesActivePreviewHit(t *testing.T) {
 		cursor:     0,
 		previewHit: 1,
 		theme:      Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
-		options:    Options{ShowPreview: true},
+		options:    Options{ShowMatchContext: true},
 	}
 	model.preview = notes.BuildPreview(entry, "static")
 
@@ -534,7 +570,7 @@ func TestSelectedCommandPreviewDoesNotDuplicatePrefix(t *testing.T) {
 		}},
 		cursor:  0,
 		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0"},
-		options: Options{ShowPreview: true},
+		options: Options{ShowMatchContext: true},
 	}
 	model.preview = notes.BuildPreview(entry, "push")
 

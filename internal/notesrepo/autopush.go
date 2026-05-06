@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -63,11 +62,14 @@ func pushWithRebaseRetry(repoRoot string, stdout, stderr io.Writer) error {
 	}
 	if pullErr != nil {
 		_ = gitRun(repoRoot, io.Discard, io.Discard, "rebase", "--abort")
+		if hint := gitAuthHint(pullOutput, pullErr); hint != "" {
+			return fmt.Errorf("git pull --rebase: %s", hint)
+		}
 		return fmt.Errorf("git pull --rebase failed, resolve notes repo conflict manually: %w", pullErr)
 	}
 
 	if err := gitRun(repoRoot, stdout, stderr, "push"); err != nil {
-		return fmt.Errorf("git push after rebase: %w", err)
+		return authAwareGitError("git push after rebase", nil, err)
 	}
 	return nil
 }
@@ -83,19 +85,22 @@ func repoRootForPath(path string) string {
 }
 
 func hasStagedChanges(dir, relPath string) bool {
-	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--quiet", "--", relPath)
+	cmd := gitCommand(dir, "diff", "--cached", "--quiet", "--", relPath)
 	return cmd.Run() != nil
 }
 
 func gitRun(dir string, stdout, stderr io.Writer, args ...string) error {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := gitCommand(dir, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return authAwareGitError("git "+strings.Join(args, " "), nil, err)
+	}
+	return nil
 }
 
 func gitCombined(dir string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := gitCommand(dir, args...)
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

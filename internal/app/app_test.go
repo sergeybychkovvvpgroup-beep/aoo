@@ -2,11 +2,10 @@ package app
 
 import (
 	"bytes"
-	"errors"
 	"strings"
 	"testing"
 
-	"aoo/internal/ui"
+	"aoo/internal/notes"
 )
 
 func TestPromptCommandRunPrintsCommandWithoutConfirmation(t *testing.T) {
@@ -28,23 +27,20 @@ func TestPromptCommandRunPrintsCommandWithoutConfirmation(t *testing.T) {
 	}
 }
 
-func TestShortErrorUsesFirstLine(t *testing.T) {
-	err := errors.New("first line\nsecond line")
-	if got := shortError(err); got != "first line" {
-		t.Fatalf("unexpected short error: %q", got)
+func TestRunHeaderSkipsDuplicateActionDescription(t *testing.T) {
+	entry := notes.Entry{Desc: "Vyos-DHCP Chashnikovo показать subnets"}
+	action := &notes.Action{Desc: "Vyos-DHCP Chashnikovo показать subnets"}
+
+	if got := runHeader(entry, action); got != entry.DisplayName() {
+		t.Fatalf("expected deduplicated run header, got %q", got)
 	}
 }
 
-func TestStartNotesSyncReturnsStatus(t *testing.T) {
-	ch := make(chan ui.SyncStatus, 1)
-	ch <- ui.SyncStatus{State: ui.SyncStateOK}
-	close(ch)
+func TestRunHeaderKeepsDistinctActionDescription(t *testing.T) {
+	entry := notes.Entry{Desc: "Vyos-DHCP Chashnikovo"}
+	action := &notes.Action{Desc: "показать subnets"}
 
-	status, ok := <-ch
-	if !ok {
-		t.Fatal("expected sync status")
-	}
-	if status.State != ui.SyncStateOK {
-		t.Fatalf("unexpected sync status: %#v", status)
+	if got := runHeader(entry, action); got != "Vyos-DHCP Chashnikovo :: показать subnets" {
+		t.Fatalf("unexpected run header: %q", got)
 	}
 }

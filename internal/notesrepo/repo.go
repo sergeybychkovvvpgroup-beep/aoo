@@ -197,24 +197,27 @@ func cloneRepo(repoURL, targetDir string, stdout, stderr io.Writer) error {
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
 		return err
 	}
-	cmd := exec.Command("git", "clone", repoURL, targetDir)
+	cmd := gitCommand("", "clone", repoURL, targetDir)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return authAwareGitError("git clone", nil, err)
+	}
+	return nil
 }
 
 func isGitRepo(dir string) bool {
-	cmd := exec.Command("git", "-C", dir, "rev-parse", "--is-inside-work-tree")
+	cmd := gitCommand(dir, "rev-parse", "--is-inside-work-tree")
 	return cmd.Run() == nil
 }
 
 func git(dir string, args ...string) error {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := gitCommand(dir, args...)
 	return cmd.Run()
 }
 
 func gitOutput(dir string, args ...string) string {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := gitCommand(dir, args...)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
@@ -246,7 +249,7 @@ func commitAll(dir, message string, stdout, stderr io.Writer) error {
 }
 
 func hasAnyStagedChanges(dir string) bool {
-	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--quiet")
+	cmd := gitCommand(dir, "diff", "--cached", "--quiet")
 	return cmd.Run() != nil
 }
 
@@ -256,6 +259,81 @@ func compactGitError(prefix string, output []byte, err error) error {
 		return fmt.Errorf("%s: %w", prefix, err)
 	}
 	return fmt.Errorf("%s: %s", prefix, message)
+}
+
+func gitCommand(dir string, args ...string) *exec.Cmd {
+	cmdArgs := args
+	if strings.TrimSpace(dir) != "" {
+		cmdArgs = append([]string{"-C", dir}, args...)
+	}
+
+	cmd := exec.Command("git", cmdArgs...)
+	cmd.Env = nonInteractiveGitEnv()
+	return cmd
+}
+
+func nonInteractiveGitEnv() []string {
+	env := append([]string{}, os.Environ()...)
+	env = appendOrReplaceEnv(env, "GIT_TERMINAL_PROMPT=0")
+	env = appendOrReplaceEnv(env, "GCM_INTERACTIVE=Never")
+	env = appendOrReplaceEnv(env, "SSH_ASKPASS=")
+	env = appendOrReplaceEnv(env, "GIT_ASKPASS=")
+
+	sshCommand := strings.TrimSpace(os.Getenv("GIT_SSH_COMMAND"))
+	if sshCommand == "" {
+		sshCommand = "ssh -o BatchMode=yes"
+	} else if !strings.Contains(sshCommand, "BatchMode=yes") {
+		sshCommand += " -o BatchMode=yes"
+	}
+	env = appendOrReplaceEnv(env, "GIT_SSH_COMMAND="+sshCommand)
+	return env
+}
+
+func appendOrReplaceEnv(env []string, pair string) []string {
+	key, _, ok := strings.Cut(pair, "=")
+	if !ok {
+		return env
+	}
+	prefix := key + "="
+	for i, existing := range env {
+		if strings.HasPrefix(existing, prefix) {
+			env[i] = pair
+			return env
+		}
+	}
+	return append(env, pair)
+}
+
+func authAwareGitError(prefix string, output []byte, err error) error {
+	if hint := gitAuthHint(output, err); hint != "" {
+		return fmt.Errorf("%s: %s", prefix, hint)
+	}
+	return compactGitError(prefix, output, err)
+}
+
+func gitAuthHint(output []byte, err error) string {
+	text := strings.ToLower(strings.TrimSpace(string(output)))
+	if err != nil && text == "" {
+		text = strings.ToLower(strings.TrimSpace(err.Error()))
+	}
+
+	authMarkers := []string{
+		"permission denied",
+		"publickey",
+		"could not read from remote repository",
+		"terminal prompts disabled",
+		"batchmode",
+		"could not resolve hostname",
+		"authentication failed",
+		"passphrase",
+		"password",
+	}
+	for _, marker := range authMarkers {
+		if strings.Contains(text, marker) {
+			return "git auth failed; add the repo deploy key or preload the SSH key in ssh-agent. Password/passphrase prompts are disabled for automatic operations"
+		}
+	}
+	return ""
 }
 
 func firstNonEmptyLine(text string) string {

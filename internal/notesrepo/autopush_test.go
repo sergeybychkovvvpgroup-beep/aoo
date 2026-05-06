@@ -2,6 +2,7 @@ package notesrepo
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,6 +224,37 @@ func TestSyncPullsRemoteChangesIntoCleanClone(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(worktree, "extra.md")); err != nil {
 		t.Fatalf("expected remote file to be pulled locally: %v", err)
+	}
+}
+
+func TestNonInteractiveGitEnvDisablesPrompts(t *testing.T) {
+	t.Setenv("GIT_SSH_COMMAND", "ssh -F /tmp/test-config")
+
+	env := nonInteractiveGitEnv()
+	joined := strings.Join(env, "\n")
+
+	for _, expected := range []string{
+		"GIT_TERMINAL_PROMPT=0",
+		"GCM_INTERACTIVE=Never",
+		"SSH_ASKPASS=",
+		"GIT_ASKPASS=",
+		"GIT_SSH_COMMAND=ssh -F /tmp/test-config -o BatchMode=yes",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected env to contain %q, got %q", expected, joined)
+		}
+	}
+}
+
+func TestGitAuthHintExplainsMissingDeployKey(t *testing.T) {
+	output := []byte("git@git.example: Permission denied (publickey,password).\nfatal: Could not read from remote repository.\n")
+
+	hint := gitAuthHint(output, errors.New("exit status 128"))
+	if !strings.Contains(hint, "deploy key") {
+		t.Fatalf("expected deploy key hint, got %q", hint)
+	}
+	if !strings.Contains(hint, "ssh-agent") {
+		t.Fatalf("expected ssh-agent hint, got %q", hint)
 	}
 }
 

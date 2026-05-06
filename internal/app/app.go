@@ -34,8 +34,6 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runSetSource(stdin, stdout, stderr)
 		case "set-folder":
 			return runSetFolder(args[1:], stdout, stderr)
-		case "set-app-dir":
-			return runSetAppDir(args[1:], stdout, stderr)
 		case "set-theme":
 			return runSetTheme(args[1:], stdout, stderr)
 		case "add":
@@ -83,11 +81,6 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		}
 	}
 
-	var syncStream <-chan ui.SyncStatus
-	if strings.TrimSpace(root) != "" {
-		syncStream = startNotesSync(root)
-	}
-
 	themeName, _, err := config.ResolveTheme(*themeFlag)
 	if err != nil {
 		return err
@@ -96,12 +89,9 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 	uiOptions := ui.Options{
 		FullScreen:       cfg.FullScreen,
 		Height:           cfg.PickerHeight,
-		ShowPreview:      cfg.ShowPreview,
+		ShowMatchContext: cfg.ShowMatchContext,
+		ShowListOnStart:  cfg.ShowListOnStart,
 		Layout:           cfg.Layout,
-		SyncStatusStream: syncStream,
-	}
-	if syncStream != nil {
-		uiOptions.InitialSync = ui.SyncStatus{State: ui.SyncStateRunning}
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -184,33 +174,6 @@ func clearInteractiveArea(stdout io.Writer, height int) {
 	fmt.Fprintf(stdout, "\r\x1b[%dA\x1b[J", rows)
 }
 
-func startNotesSync(root string) <-chan ui.SyncStatus {
-	result := make(chan ui.SyncStatus, 1)
-	go func() {
-		defer close(result)
-		if err := notesrepo.Sync(root, io.Discard, io.Discard); err != nil {
-			result <- ui.SyncStatus{State: ui.SyncStateError, Message: shortError(err)}
-			return
-		}
-		result <- ui.SyncStatus{State: ui.SyncStateOK}
-	}()
-	return result
-}
-
-func shortError(err error) string {
-	if err == nil {
-		return ""
-	}
-	text := strings.TrimSpace(err.Error())
-	if text == "" {
-		return "unknown error"
-	}
-	if line := strings.TrimSpace(strings.Split(text, "\n")[0]); line != "" {
-		return line
-	}
-	return text
-}
-
 func runValidate(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -246,11 +209,7 @@ func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout
 	}
 	command := strings.TrimSpace(action.Cmd)
 	banner := strings.TrimSpace(action.Banner)
-	desc := entry.DisplayName()
-
-	if strings.TrimSpace(action.Desc) != "" {
-		desc = fmt.Sprintf("%s :: %s", entry.DisplayName(), action.Desc)
-	}
+	desc := runHeader(entry, action)
 
 	if err := promptCommandRun(desc, command, stdout); err != nil {
 		return err
@@ -265,6 +224,18 @@ func runCommand(entry notes.Entry, action *notes.Action, stdin io.Reader, stdout
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+func runHeader(entry notes.Entry, action *notes.Action) string {
+	base := strings.TrimSpace(entry.DisplayName())
+	if action == nil {
+		return base
+	}
+	suffix := strings.TrimSpace(action.Desc)
+	if suffix == "" || strings.EqualFold(base, suffix) {
+		return base
+	}
+	return fmt.Sprintf("%s :: %s", base, suffix)
 }
 
 func promptCommandRun(desc, command string, stdout io.Writer) error {
@@ -285,8 +256,6 @@ func runConfig(args []string, stdout, stderr io.Writer) error {
 		return runSetSource(os.Stdin, stdout, stderr)
 	case "set-folder":
 		return runSetFolder(args[1:], stdout, stderr)
-	case "set-app-dir":
-		return runSetAppDir(args[1:], stdout, stderr)
 	case "set-theme":
 		return runSetTheme(args[1:], stdout, stderr)
 	default:
@@ -349,47 +318,20 @@ func runConfigShow(stdout io.Writer) error {
 	if themeErr != nil {
 		return themeErr
 	}
-	appDir, appSource, appErr := config.ResolveAppDir("")
-	if appErr != nil {
-		return appErr
-	}
-
 	fmt.Fprintf(stdout, "config file: %s\n", configPath)
 	fmt.Fprintf(stdout, "notes_dir: %s\n", emptyIfUnset(cfg.NotesDir))
 	fmt.Fprintf(stdout, "notes_repo: %s\n", emptyIfUnset(cfg.NotesRepo))
 	fmt.Fprintf(stdout, "active dir: %s\n", emptyIfUnset(root))
 	fmt.Fprintf(stdout, "active source: %s\n", source)
-	fmt.Fprintf(stdout, "app_dir: %s\n", emptyIfUnset(cfg.AppDir))
-	fmt.Fprintf(stdout, "active app dir: %s\n", emptyIfUnset(appDir))
-	fmt.Fprintf(stdout, "app dir source: %s\n", emptyIfUnset(appSource))
 	fmt.Fprintf(stdout, "theme: %s\n", emptyIfUnset(cfg.Theme))
 	fmt.Fprintf(stdout, "active theme: %s\n", themeName)
 	fmt.Fprintf(stdout, "theme source: %s\n", themeSource)
 	fmt.Fprintf(stdout, "layout: %s\n", cfg.Layout)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
-	fmt.Fprintf(stdout, "show_preview: %t\n", cfg.ShowPreview)
+	fmt.Fprintf(stdout, "show_match_context: %t\n", cfg.ShowMatchContext)
+	fmt.Fprintf(stdout, "show_list_on_start: %t\n", cfg.ShowListOnStart)
 	return nil
-}
-
-func runSetAppDir(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("set-app-dir", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if fs.NArg() != 1 {
-		return errors.New("usage: aoo set-app-dir /path/to/aoo")
-	}
-
-	path, err := config.SetAppDir(fs.Arg(0))
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintf(stdout, "configured app_dir: %s\n", path)
-	return err
 }
 
 func runSetTheme(args []string, stdout, stderr io.Writer) error {
@@ -564,7 +506,6 @@ func printConfigUsage(w io.Writer) {
 	fmt.Fprintln(w, "  aoo config")
 	fmt.Fprintln(w, "  aoo config show")
 	fmt.Fprintln(w, "  aoo config set-folder PATH")
-	fmt.Fprintln(w, "  aoo config set-app-dir PATH")
 	fmt.Fprintln(w, "  aoo config set-theme THEME")
 }
 
