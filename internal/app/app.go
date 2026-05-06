@@ -81,6 +81,11 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		}
 	}
 
+	var syncStream <-chan ui.SyncStatus
+	if strings.TrimSpace(root) != "" {
+		syncStream = startNotesSync(root)
+	}
+
 	themeName, _, err := config.ResolveTheme(*themeFlag)
 	if err != nil {
 		return err
@@ -92,6 +97,10 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		ShowMatchContext: cfg.ShowMatchContext,
 		ShowListOnStart:  cfg.ShowListOnStart,
 		Layout:           cfg.Layout,
+		SyncStatusStream: syncStream,
+	}
+	if syncStream != nil {
+		uiOptions.InitialSync = ui.SyncStatus{State: ui.SyncStateRunning}
 	}
 	if uiOptions.FullScreen {
 		uiOptions.Height = 0
@@ -172,6 +181,33 @@ func clearInteractiveArea(stdout io.Writer, height int) {
 	}
 	rows += 2
 	fmt.Fprintf(stdout, "\r\x1b[%dA\x1b[J", rows)
+}
+
+func startNotesSync(root string) <-chan ui.SyncStatus {
+	result := make(chan ui.SyncStatus, 1)
+	go func() {
+		defer close(result)
+		if err := notesrepo.Sync(root, io.Discard, io.Discard); err != nil {
+			result <- ui.SyncStatus{State: ui.SyncStateError, Message: shortError(err)}
+			return
+		}
+		result <- ui.SyncStatus{State: ui.SyncStateOK}
+	}()
+	return result
+}
+
+func shortError(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := strings.TrimSpace(err.Error())
+	if text == "" {
+		return "unknown error"
+	}
+	if line := strings.TrimSpace(strings.Split(text, "\n")[0]); line != "" {
+		return line
+	}
+	return text
 }
 
 func runValidate(args []string, stdout, stderr io.Writer) error {

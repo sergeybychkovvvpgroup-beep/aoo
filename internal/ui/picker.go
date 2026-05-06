@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"aoo/internal/notes"
@@ -28,7 +29,11 @@ type PickerModel struct {
 	cancelled    bool
 	previewCache map[string]notes.PreviewMatch
 	theme        Theme
+	syncStatus   SyncStatus
+	syncStream   <-chan SyncStatus
 }
+
+type syncPollMsg struct{}
 
 func NewPicker(entries []notes.Entry, initialQuery string, theme Theme, options Options) PickerModel {
 	input := textinput.New()
@@ -48,13 +53,19 @@ func NewPicker(entries []notes.Entry, initialQuery string, theme Theme, options 
 		theme:        theme,
 		options:      options,
 		previewCache: make(map[string]notes.PreviewMatch),
+		syncStatus:   options.InitialSync,
+		syncStream:   options.SyncStatusStream,
 	}
 	m.refresh()
 	return m
 }
 
 func (m PickerModel) Init() tea.Cmd {
-	return textinput.Blink
+	cmds := []tea.Cmd{textinput.Blink}
+	if m.syncStream != nil {
+		cmds = append(cmds, m.pollSyncStatus())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -66,6 +77,20 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.Width = inputWidth
 		}
 		return m, nil
+	case syncPollMsg:
+		if m.syncStream == nil {
+			return m, nil
+		}
+		select {
+		case status, ok := <-m.syncStream:
+			if !ok {
+				m.syncStream = nil
+				return m, nil
+			}
+			m.syncStatus = status
+		default:
+		}
+		return m, m.pollSyncStatus()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -148,7 +173,7 @@ func (m PickerModel) View() string {
 			resultBlock = append(resultBlock, "")
 		}
 		lines = append(lines, resultBlock...)
-		lines = append(lines, titleStyle.Render(m.statusLine()))
+		lines = append(lines, m.renderStatusBar(titleStyle))
 		lines = append(lines, helpLine, inputLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			padding := make([]string, 0, effectiveHeight-len(lines))
@@ -164,7 +189,7 @@ func (m PickerModel) View() string {
 			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle, helpStyle)...)
 		}
 		lines = append(lines, "")
-		lines = append(lines, titleStyle.Render(m.statusLine()))
+		lines = append(lines, m.renderStatusBar(titleStyle))
 		lines = append(lines, helpLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			fillerAt := len(lines) - 1
@@ -181,6 +206,12 @@ func (m PickerModel) View() string {
 		MaxHeight(maxInt(4, effectiveHeight)).
 		Render(strings.Join(lines, "\n"))
 	return mainView
+}
+
+func (m PickerModel) pollSyncStatus() tea.Cmd {
+	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
+		return syncPollMsg{}
+	})
 }
 
 func (m PickerModel) Selected() *notes.Entry {
@@ -376,6 +407,60 @@ func (m PickerModel) statusLine() string {
 		}
 	}
 	return status
+}
+
+func (m PickerModel) renderStatusBar(baseStyle lipgloss.Style) string {
+	line := baseStyle.Render(m.statusLine())
+	if sync := m.renderSyncStatus(); sync != "" {
+		line += baseStyle.Render("  ·  ") + sync
+	}
+	return line
+}
+
+func (m PickerModel) renderSyncStatus() string {
+	label := strings.TrimSpace(m.syncStatusLabel())
+	if label == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.syncStatusColor())).
+		Render(label)
+}
+
+func (m PickerModel) syncStatusLabel() string {
+	switch m.syncStatus.State {
+	case SyncStateRunning:
+		return "sync"
+	case SyncStateOK:
+		return "sync ok"
+	case SyncStateWarn:
+		if msg := strings.TrimSpace(m.syncStatus.Message); msg != "" {
+			return "sync " + msg
+		}
+		return "sync warn"
+	case SyncStateError:
+		if msg := strings.TrimSpace(m.syncStatus.Message); msg != "" {
+			return "sync " + msg
+		}
+		return "sync failed"
+	default:
+		return ""
+	}
+}
+
+func (m PickerModel) syncStatusColor() string {
+	switch m.syncStatus.State {
+	case SyncStateOK:
+		return m.theme.StatusOKFG
+	case SyncStateWarn:
+		return m.theme.StatusWarnFG
+	case SyncStateError:
+		return m.theme.StatusErrFG
+	case SyncStateRunning:
+		return m.theme.StatusRunFG
+	default:
+		return m.theme.TitleDimFG
+	}
 }
 
 func pickerHelpText() string {

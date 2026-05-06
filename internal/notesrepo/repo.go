@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"aoo/internal/config"
@@ -281,12 +282,124 @@ func nonInteractiveGitEnv() []string {
 
 	sshCommand := strings.TrimSpace(os.Getenv("GIT_SSH_COMMAND"))
 	if sshCommand == "" {
-		sshCommand = "ssh -o BatchMode=yes"
+		sshCommand = autoSSHCommand()
 	} else if !strings.Contains(sshCommand, "BatchMode=yes") {
 		sshCommand += " -o BatchMode=yes"
 	}
 	env = appendOrReplaceEnv(env, "GIT_SSH_COMMAND="+sshCommand)
 	return env
+}
+
+func autoSSHCommand() string {
+	args := []string{"ssh"}
+	for _, path := range discoverSSHIdentityFiles() {
+		args = append(args, "-i", shellQuote(path))
+	}
+	args = append(args, "-o", "BatchMode=yes")
+	return strings.Join(args, " ")
+}
+
+func discoverSSHIdentityFiles() []string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return nil
+	}
+
+	sshDir := filepath.Join(home, ".ssh")
+	entries, err := os.ReadDir(sshDir)
+	if err != nil {
+		return nil
+	}
+
+	preferred := map[string]int{
+		"id_ed25519":    1,
+		"id_ecdsa":      2,
+		"id_ecdsa_sk":   3,
+		"id_ed25519_sk": 4,
+		"id_rsa":        5,
+		"id_dsa":        6,
+		"identity":      7,
+	}
+
+	type candidate struct {
+		path     string
+		priority int
+	}
+
+	candidates := make([]candidate, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !looksLikePrivateKeyName(name) {
+			continue
+		}
+		path := filepath.Join(sshDir, name)
+		if !isPrivateKeyFile(path) {
+			continue
+		}
+		priority := 100
+		if value, ok := preferred[name]; ok {
+			priority = value
+		}
+		candidates = append(candidates, candidate{path: path, priority: priority})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].priority != candidates[j].priority {
+			return candidates[i].priority < candidates[j].priority
+		}
+		return candidates[i].path < candidates[j].path
+	})
+
+	paths := make([]string, 0, len(candidates))
+	for _, item := range candidates {
+		paths = append(paths, item.path)
+	}
+	return paths
+}
+
+func looksLikePrivateKeyName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	if strings.HasSuffix(name, ".pub") {
+		return false
+	}
+	switch name {
+	case "authorized_keys", "known_hosts", "known_hosts.old", "config":
+		return false
+	}
+	return true
+}
+
+func isPrivateKeyFile(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	line := strings.TrimSpace(firstNonEmptyLine(string(data[:minInt(len(data), 256)])))
+	return strings.HasPrefix(line, "-----BEGIN OPENSSH PRIVATE KEY-----") ||
+		strings.HasPrefix(line, "-----BEGIN RSA PRIVATE KEY-----") ||
+		strings.HasPrefix(line, "-----BEGIN EC PRIVATE KEY-----") ||
+		strings.HasPrefix(line, "-----BEGIN DSA PRIVATE KEY-----") ||
+		strings.HasPrefix(line, "-----BEGIN PRIVATE KEY-----")
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func appendOrReplaceEnv(env []string, pair string) []string {

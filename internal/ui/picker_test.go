@@ -186,6 +186,37 @@ func TestStatusLineShowsOnlyMatchesAndTotal(t *testing.T) {
 	}
 }
 
+func TestRenderStatusBarIncludesSyncLabel(t *testing.T) {
+	model := PickerModel{
+		entries:     make([]notes.Entry, 3),
+		matches:     make([]notes.Match, 1),
+		syncStatus:  SyncStatus{State: SyncStateRunning},
+		theme:       Theme{TitleDimFG: "8", StatusRunFG: "4"},
+	}
+
+	got := model.renderStatusBar(lipgloss.NewStyle())
+	if !strings.Contains(got, "1/3") {
+		t.Fatalf("expected counts in status bar, got %q", got)
+	}
+	if !strings.Contains(got, "sync") {
+		t.Fatalf("expected sync label in status bar, got %q", got)
+	}
+}
+
+func TestRenderStatusBarIncludesSyncErrorMessage(t *testing.T) {
+	model := PickerModel{
+		entries:    make([]notes.Entry, 3),
+		matches:    make([]notes.Match, 1),
+		syncStatus: SyncStatus{State: SyncStateError, Message: "auth failed"},
+		theme:      Theme{TitleDimFG: "8", StatusErrFG: "1"},
+	}
+
+	got := model.renderStatusBar(lipgloss.NewStyle())
+	if !strings.Contains(got, "sync auth failed") {
+		t.Fatalf("expected sync error in status bar, got %q", got)
+	}
+}
+
 func TestStatusLineShowsEnterRunHint(t *testing.T) {
 	entry := notes.Entry{
 		Desc: "ssh office-notebook",

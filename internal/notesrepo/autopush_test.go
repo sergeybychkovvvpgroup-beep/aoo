@@ -246,6 +246,37 @@ func TestNonInteractiveGitEnvDisablesPrompts(t *testing.T) {
 	}
 }
 
+func TestNonInteractiveGitEnvAutoAddsSSHKeysFromHome(t *testing.T) {
+	home := t.TempDir()
+	sshDir := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(sshDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "aookey"), []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nkey\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "id_ed25519"), []byte("-----BEGIN OPENSSH PRIVATE KEY-----\nkey\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "id_ed25519.pub"), []byte("ssh-ed25519 AAAA\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sshDir, "config"), []byte("Host *\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_SSH_COMMAND", "")
+
+	env := nonInteractiveGitEnv()
+	joined := strings.Join(env, "\n")
+
+	expected := "GIT_SSH_COMMAND=ssh -i '" + filepath.Join(sshDir, "id_ed25519") + "' -i '" + filepath.Join(sshDir, "aookey") + "' -o BatchMode=yes"
+	if !strings.Contains(joined, expected) {
+		t.Fatalf("expected env to contain %q, got %q", expected, joined)
+	}
+}
+
 func TestGitAuthHintExplainsMissingDeployKey(t *testing.T) {
 	output := []byte("git@git.example: Permission denied (publickey,password).\nfatal: Could not read from remote repository.\n")
 
