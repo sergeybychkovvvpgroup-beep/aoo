@@ -26,6 +26,7 @@ type File struct {
 	PickerHeight     int    `yaml:"picker_height"`
 	ShowMatchContext bool   `yaml:"show_match_context"`
 	ShowListOnStart  bool   `yaml:"show_list_on_start"`
+	TwoLineResults   bool   `yaml:"two_line_results"`
 }
 
 type rawFile struct {
@@ -37,6 +38,7 @@ type rawFile struct {
 	PickerHeight        *int   `yaml:"picker_height"`
 	ShowMatchContext    *bool  `yaml:"show_match_context"`
 	ShowListOnStart     *bool  `yaml:"show_list_on_start"`
+	TwoLineResults      *bool  `yaml:"two_line_results"`
 	LegacyShowPreview   *bool  `yaml:"show_preview"`
 	LegacyShowNotesList *bool  `yaml:"show_notes_on_start"`
 }
@@ -84,6 +86,7 @@ func DefaultFile() File {
 		PickerHeight:     14,
 		ShowMatchContext: false,
 		ShowListOnStart:  false,
+		TwoLineResults:   true,
 	}
 }
 
@@ -134,6 +137,9 @@ func Load() (File, error) {
 		cfg.ShowListOnStart = *parsed.ShowListOnStart
 	} else if parsed.LegacyShowNotesList != nil {
 		cfg.ShowListOnStart = *parsed.LegacyShowNotesList
+	}
+	if parsed.TwoLineResults != nil {
+		cfg.TwoLineResults = *parsed.TwoLineResults
 	}
 	if cfg.PickerHeight < 6 {
 		cfg.PickerHeight = 6
@@ -303,6 +309,9 @@ func renderConfig(cfg File) string {
 		"# aoo",
 		"# themes: fzf-dark, catppuccin-mocha, catppuccin-latte, dracula, nord, solarized-dark, solarized-light",
 		"# layout: top | bottom",
+		"# show_match_context: preview line for selected item",
+		"# show_list_on_start: render results when query is empty",
+		"# two_line_results: desc on first line, command/text on second line",
 		"notes_dir: " + yamlScalar(cfg.NotesDir),
 		"notes_repo: " + yamlScalar(cfg.NotesRepo),
 		"theme: " + yamlScalar(cfg.Theme),
@@ -311,6 +320,7 @@ func renderConfig(cfg File) string {
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
 		"show_match_context: " + yamlScalarBool(cfg.ShowMatchContext),
 		"show_list_on_start: " + yamlScalarBool(cfg.ShowListOnStart),
+		"two_line_results: " + yamlScalarBool(cfg.TwoLineResults),
 		"",
 	}
 	return strings.Join(lines, "\n")
@@ -336,6 +346,9 @@ func configNeedsRewrite(raw []byte, cfg File) bool {
 		return true
 	}
 	if !strings.Contains(text, "show_list_on_start:") {
+		return true
+	}
+	if !strings.Contains(text, "two_line_results:") {
 		return true
 	}
 

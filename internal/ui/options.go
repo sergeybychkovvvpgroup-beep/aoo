@@ -16,11 +16,12 @@ type SyncStatus struct {
 }
 
 type Options struct {
-	FullScreen       bool
-	Height           int
-	ShowMatchContext bool
-	ShowListOnStart  bool
-	Layout           string
-	InitialSync      SyncStatus
-	SyncStatusStream <-chan SyncStatus
+	FullScreen        bool
+	Height            int
+	ShowMatchContext  bool
+	ShowListOnStart   bool
+	SingleLineResults bool
+	Layout            string
+	InitialSync       SyncStatus
+	SyncStatusStream  <-chan SyncStatus
 }

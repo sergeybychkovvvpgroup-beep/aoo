@@ -10,6 +10,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+func lineExceedsWidth(lines []string, width int) bool {
+	for _, line := range lines {
+		if lipgloss.Width(line) > width {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 	model := PickerModel{
 		input: textInputWithValue("static"),
@@ -43,8 +52,30 @@ func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 		t.Fatalf("expected multiline view, got %q", view)
 	}
 	lastLines := strings.Join(lines[maxInt(0, len(lines)-4):], "\n")
-	if !strings.Contains(lastLines, "esc quit") {
+	if !strings.Contains(lastLines, "notes> static") {
+		t.Fatalf("expected input block near bottom, got %q", lastLines)
+	}
+	if !strings.Contains(lastLines, "enter open") {
 		t.Fatalf("expected help block near bottom, got %q", lastLines)
+	}
+}
+
+func TestViewClampsInputAndHelpToTerminalWidth(t *testing.T) {
+	model := PickerModel{
+		input: textInputWithValue(":cmd git add . && git commit -m test"),
+		matches: []notes.Match{
+			{Entry: notes.Entry{Desc: "router notes"}, Label: "router notes", Detail: "dhcp"},
+		},
+		height:  8,
+		width:   24,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8", TitleFG: "7"},
+		options: Options{Layout: "bottom"},
+	}
+
+	view := model.View()
+	lines := strings.Split(view, "\n")
+	if lineExceedsWidth(lines, model.contentWidth()) {
+		t.Fatalf("expected all lines to fit width %d, got %q", model.contentWidth(), view)
 	}
 }
 
@@ -188,10 +219,10 @@ func TestStatusLineShowsOnlyMatchesAndTotal(t *testing.T) {
 
 func TestRenderStatusBarIncludesSyncLabel(t *testing.T) {
 	model := PickerModel{
-		entries:     make([]notes.Entry, 3),
-		matches:     make([]notes.Match, 1),
-		syncStatus:  SyncStatus{State: SyncStateRunning},
-		theme:       Theme{TitleDimFG: "8", StatusRunFG: "4"},
+		entries:    make([]notes.Entry, 3),
+		matches:    make([]notes.Match, 1),
+		syncStatus: SyncStatus{State: SyncStateRunning},
+		theme:      Theme{TitleDimFG: "8", StatusRunFG: "4"},
 	}
 
 	got := model.renderStatusBar(lipgloss.NewStyle())
@@ -346,6 +377,78 @@ func TestResultLinesRenderBadgeLineBelowSelectedEntry(t *testing.T) {
 	}
 	if !strings.Contains(lines[1], "enter: select action") {
 		t.Fatalf("expected detail line with enter action, got %q", lines[1])
+	}
+}
+
+func TestCompactResultLinesRenderSingleLine(t *testing.T) {
+	entry := notes.Entry{
+		Desc: "vyos chashnikovo",
+		Actions: []notes.Action{
+			{Desc: "ssh", Cmd: "ssh user@host"},
+		},
+	}
+
+	model := PickerModel{
+		input: textInputWithValue("vyos"),
+		matches: []notes.Match{{
+			Entry:  entry,
+			Label:  entry.Desc,
+			Detail: entry.DisplayValue(),
+		}},
+		cursor:  0,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		options: Options{SingleLineResults: true},
+	}
+
+	lines := model.resultLines(80, lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle())
+	if len(lines) != 1 {
+		t.Fatalf("expected compact mode to render one line, got %d: %#v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], "vyos chashnikovo") || !strings.Contains(lines[0], "· ssh user@host") {
+		t.Fatalf("expected compact line to contain both desc and detail, got %q", lines[0])
+	}
+}
+
+func TestCompactModeUsesSingleRowHeight(t *testing.T) {
+	model := PickerModel{
+		options: Options{SingleLineResults: true},
+	}
+	if got := model.resultRowHeight(); got != 1 {
+		t.Fatalf("expected compact mode row height 1, got %d", got)
+	}
+}
+
+func TestCompactResultLinesKeepDetailInline(t *testing.T) {
+	entry := notes.Entry{
+		Desc: "proxmox chashnikovo",
+		Actions: []notes.Action{
+			{Desc: "ssh", Cmd: "10.117.0.1"},
+		},
+	}
+
+	model := PickerModel{
+		input: textInputWithValue("proxmox"),
+		matches: []notes.Match{{
+			Entry:  entry,
+			Label:  entry.Desc,
+			Detail: entry.DisplayValue(),
+		}},
+		cursor:  0,
+		width:   54,
+		theme:   Theme{SelectedMark: ">", SelectedFG: "15", SelectedBG: "0"},
+		options: Options{SingleLineResults: true},
+	}
+
+	lines := model.resultLines(54, lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle(), lipgloss.NewStyle())
+	if len(lines) != 1 {
+		t.Fatalf("expected single compact line, got %d: %#v", len(lines), lines)
+	}
+	if lipgloss.Width(lines[0]) > 54 {
+		t.Fatalf("expected line to fit width 54, got %d: %q", lipgloss.Width(lines[0]), lines[0])
+	}
+	if !strings.Contains(lines[0], "proxmox chashnikovo") || !strings.Contains(lines[0], "· 10.117.0.1") {
+		t.Fatalf("expected inline compact detail block, got %q", lines[0])
 	}
 }
 
@@ -541,6 +644,20 @@ func TestResultLinesDoNotRenderExtraInlinePreviewBlockForCmdOnlyEntry(t *testing
 	}
 	if strings.Contains(lines[1], entry.Desc) {
 		t.Fatalf("expected selected cmd preview not to switch to description, got %q", lines[1])
+	}
+}
+
+func TestDetailLineShrinksHintOnNarrowWidth(t *testing.T) {
+	model := PickerModel{}
+	line := model.detailLine(
+		"git add . && git commit -m test && git push",
+		"enter: run command",
+		18,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+	)
+	if lipgloss.Width(line) > 18 {
+		t.Fatalf("expected detail line to fit narrow width, got %d: %q", lipgloss.Width(line), line)
 	}
 }
 

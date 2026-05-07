@@ -92,12 +92,13 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 	}
 
 	uiOptions := ui.Options{
-		FullScreen:       cfg.FullScreen,
-		Height:           cfg.PickerHeight,
-		ShowMatchContext: cfg.ShowMatchContext,
-		ShowListOnStart:  cfg.ShowListOnStart,
-		Layout:           cfg.Layout,
-		SyncStatusStream: syncStream,
+		FullScreen:        cfg.FullScreen,
+		Height:            cfg.PickerHeight,
+		ShowMatchContext:  cfg.ShowMatchContext,
+		ShowListOnStart:   cfg.ShowListOnStart,
+		SingleLineResults: !cfg.TwoLineResults,
+		Layout:            cfg.Layout,
+		SyncStatusStream:  syncStream,
 	}
 	if syncStream != nil {
 		uiOptions.InitialSync = ui.SyncStatus{State: ui.SyncStateRunning}
@@ -367,6 +368,7 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
 	fmt.Fprintf(stdout, "show_match_context: %t\n", cfg.ShowMatchContext)
 	fmt.Fprintf(stdout, "show_list_on_start: %t\n", cfg.ShowListOnStart)
+	fmt.Fprintf(stdout, "two_line_results: %t\n", cfg.TwoLineResults)
 	return nil
 }
 

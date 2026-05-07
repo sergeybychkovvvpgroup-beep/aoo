@@ -123,8 +123,8 @@ func (m ActionPickerModel) View() string {
 			lines = append(lines, "")
 		}
 	}
-	lines = append(lines, titleStyle.Render(m.statusLine()))
-	lines = append(lines, helpStyle.Render("enter choose  esc back  ↑↓ move"))
+	lines = append(lines, titleStyle.Render(truncateRunes(m.statusLine(), contentWidth)))
+	lines = append(lines, helpStyle.Render(truncateRunes("enter choose  esc back  ↑↓ move", contentWidth)))
 	return strings.Join(lines, "\n")
 }
 
@@ -306,13 +306,21 @@ func (m ActionPickerModel) detailLine(detail, hint string, width int, detailStyl
 
 	hintWidth := len([]rune(hint))
 	detailWidth := contentWidth - hintWidth - 2
-	if detailWidth < 12 {
-		detailWidth = 12
+	if detailWidth < 1 {
+		detailWidth = 1
 	}
 	left := truncateRunes(detail, detailWidth)
 	padding := contentWidth - len([]rune(left)) - hintWidth
 	if padding < 1 {
 		padding = 1
+	}
+	if len([]rune(left))+padding+hintWidth > contentWidth {
+		hint = truncateRunes(hint, maxInt(1, contentWidth-len([]rune(left))-1))
+		hintWidth = len([]rune(hint))
+		padding = contentWidth - len([]rune(left)) - hintWidth
+		if padding < 1 {
+			padding = 1
+		}
 	}
 	return "    " + detailStyle.Render(left) + strings.Repeat(" ", padding) + hintStyle.Render(hint)
 }

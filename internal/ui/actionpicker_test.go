@@ -115,3 +115,17 @@ func TestActionPickerRendersHintsForAllVisibleActions(t *testing.T) {
 		t.Fatalf("expected command hint in action picker view, got %q", view)
 	}
 }
+
+func TestActionDetailLineShrinksHintOnNarrowWidth(t *testing.T) {
+	model := ActionPickerModel{}
+	line := model.detailLine(
+		"ssh -L 8443:10.0.0.1:443 vyos@himki",
+		"enter: run command",
+		18,
+		lipgloss.NewStyle(),
+		lipgloss.NewStyle(),
+	)
+	if lipgloss.Width(line) > 18 {
+		t.Fatalf("expected detail line to fit narrow width, got %d: %q", lipgloss.Width(line), line)
+	}
+}

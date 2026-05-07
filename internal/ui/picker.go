@@ -73,9 +73,7 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		if inputWidth := m.inputWidth(); inputWidth > 8 {
-			m.input.Width = inputWidth
-		}
+		m.input.Width = m.inputWidth()
 		return m, nil
 	case syncPollMsg:
 		if m.syncStream == nil {
@@ -162,8 +160,10 @@ func (m PickerModel) View() string {
 	contentWidth := m.contentWidth()
 	effectiveHeight := m.effectiveHeight()
 
-	inputLine := inputBox.Render(m.input.View())
-	helpLine := helpStyle.Render(pickerHelpText())
+	input := m.input
+	input.Width = m.inputWidth()
+	inputLine := inputBox.Render(input.View())
+	helpLine := helpStyle.Render(truncateRunes(pickerHelpText(), contentWidth))
 	lines := make([]string, 0, maxInt(6, effectiveHeight))
 
 	if m.isBottomLayout() {
@@ -173,7 +173,7 @@ func (m PickerModel) View() string {
 			resultBlock = append(resultBlock, "")
 		}
 		lines = append(lines, resultBlock...)
-		lines = append(lines, m.renderStatusBar(titleStyle))
+		lines = append(lines, truncateRunes(m.renderStatusBar(titleStyle), contentWidth))
 		lines = append(lines, helpLine, inputLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			padding := make([]string, 0, effectiveHeight-len(lines))
@@ -189,7 +189,7 @@ func (m PickerModel) View() string {
 			lines = append(lines, m.resultLines(contentWidth, rowStyle, selectedStyle, detailStyle, helpStyle)...)
 		}
 		lines = append(lines, "")
-		lines = append(lines, m.renderStatusBar(titleStyle))
+		lines = append(lines, truncateRunes(m.renderStatusBar(titleStyle), contentWidth))
 		lines = append(lines, helpLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			fillerAt := len(lines) - 1
@@ -378,10 +378,11 @@ func (m PickerModel) effectiveHeight() int {
 }
 
 func (m PickerModel) inputWidth() int {
-	if m.contentWidth() <= 8 {
-		return 48
+	width := m.contentWidth() - lipgloss.Width(m.input.Prompt)
+	if width < 1 {
+		return 1
 	}
-	return m.contentWidth() - 4
+	return width
 }
 
 func (m PickerModel) isBottomLayout() bool {
@@ -393,7 +394,14 @@ func (m PickerModel) showInlinePreview() bool {
 }
 
 func (m PickerModel) resultRowHeight() int {
+	if !m.twoLineResults() {
+		return 1
+	}
 	return 2
+}
+
+func (m PickerModel) twoLineResults() bool {
+	return !m.options.SingleLineResults
 }
 
 func (m PickerModel) statusLine() string {
@@ -608,17 +616,8 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 	for i, match := range visible {
 		index := i + m.offset()
 		entry := match.Entry
-		prefix := "  "
-		if index == m.cursor {
-			prefix = m.theme.SelectedMark + " "
-		}
-
-		labelText := truncateRunes(match.Label, maxInt(12, width-3))
-		renderedLabel := rowStyle.Render(labelText)
-		if index == m.cursor {
-			renderedLabel = selectedStyle.Render(padRight(labelText, maxInt(12, width-3)))
-		}
-		rowLines := []string{prefix + renderedLabel}
+		selected := index == m.cursor
+		rowLines := []string{m.renderMatchLabelLine(match, entry, width, selected, rowStyle, selectedStyle, detailStyle)}
 
 		snippet := match.Detail
 		if m.showInlinePreview() && index == m.cursor && !entry.HasCmd() {
@@ -627,7 +626,9 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 				snippet = selectedSnippet
 			}
 		}
-		rowLines = append(rowLines, m.detailLine(snippet, m.enterHintText(entry), width, detailStyle, hintStyle))
+		if m.twoLineResults() {
+			rowLines = append(rowLines, m.detailLine(snippet, m.enterHintText(entry), width, detailStyle, hintStyle))
+		}
 		rows = append(rows, renderedRow{lines: rowLines})
 	}
 
@@ -642,6 +643,144 @@ func (m PickerModel) resultLines(width int, rowStyle, selectedStyle, detailStyle
 		lines = append(lines, row.lines...)
 	}
 	return lines
+}
+
+func (m PickerModel) renderMatchLabelLine(match notes.Match, entry notes.Entry, width int, selected bool, rowStyle, selectedStyle, detailStyle lipgloss.Style) string {
+	prefix := "  "
+	if selected {
+		prefix = m.theme.SelectedMark + " "
+	}
+	contentWidth := maxInt(12, width-3)
+	labelText := strings.Join(strings.Fields(strings.TrimSpace(match.Label)), " ")
+	if m.twoLineResults() {
+		labelText = truncateRunes(labelText, contentWidth)
+		if selected {
+			return prefix + selectedStyle.Render(padRight(labelText, contentWidth))
+		}
+		return prefix + rowStyle.Render(labelText)
+	}
+
+	detailText := match.Detail
+	if m.showInlinePreview() && selected && !entry.HasCmd() {
+		preview := m.cachedPreview(entry)
+		if selectedSnippet := m.inlinePreviewLine(preview, maxInt(12, width-4), m.activePreviewHit()); selectedSnippet != "" {
+			detailText = selectedSnippet
+		}
+	}
+	detailText = strings.Join(strings.Fields(strings.TrimSpace(detailText)), " ")
+
+	primary := labelText
+	if primary == "" {
+		primary = detailText
+	}
+	secondary := ""
+	if detailText != "" && detailText != labelText {
+		secondary = detailText
+	}
+	combined := compactResultLine(primary, secondary, contentWidth)
+	if selected {
+		return prefix + selectedStyle.Render(padRight(combined, contentWidth))
+	}
+
+	if secondary == "" || combined == primary {
+		return prefix + rowStyle.Render(combined)
+	}
+
+	combinedRunes := []rune(combined)
+	split := compactResultSplit(primary, secondary, contentWidth)
+	if split > len(combinedRunes) {
+		split = len(combinedRunes)
+	}
+	return prefix + rowStyle.Render(string(combinedRunes[:split])) + detailStyle.Render(string(combinedRunes[split:]))
+}
+
+func compactResultLine(primary, secondary string, width int) string {
+	primary = strings.TrimSpace(primary)
+	secondary = strings.TrimSpace(secondary)
+	if width <= 0 {
+		return ""
+	}
+	if secondary == "" {
+		return truncateRunes(primary, width)
+	}
+
+	const gap = 3
+	const minPrimaryWidth = 18
+	const separator = " · "
+	if width <= minPrimaryWidth {
+		return truncateRunes(primary, width)
+	}
+
+	maxSecondaryWidth := width / 2
+	if maxSecondaryWidth < 16 {
+		maxSecondaryWidth = 16
+	}
+	if maxSecondaryWidth > 48 {
+		maxSecondaryWidth = 48
+	}
+
+	availableSecondaryWidth := width - minPrimaryWidth - gap
+	if availableSecondaryWidth < 0 {
+		availableSecondaryWidth = 0
+	}
+	if maxSecondaryWidth > availableSecondaryWidth {
+		maxSecondaryWidth = availableSecondaryWidth
+	}
+
+	secondary = truncateRunes(secondary, maxSecondaryWidth)
+	secondaryWidth := utf8.RuneCountInString(secondary)
+	if secondaryWidth == 0 {
+		return truncateRunes(primary, width)
+	}
+
+	primaryWidth := width - secondaryWidth - gap
+	if primaryWidth < 1 {
+		return truncateRunes(primary, width)
+	}
+	return truncateRunes(primary, primaryWidth) + separator + secondary
+}
+
+func compactResultSplit(primary, secondary string, width int) int {
+	primary = strings.TrimSpace(primary)
+	secondary = strings.TrimSpace(secondary)
+	if width <= 0 || secondary == "" {
+		return utf8.RuneCountInString(truncateRunes(primary, width))
+	}
+
+	const gap = 3
+	const minPrimaryWidth = 18
+	if width <= minPrimaryWidth {
+		return utf8.RuneCountInString(truncateRunes(primary, width))
+	}
+
+	maxSecondaryWidth := width / 2
+	if maxSecondaryWidth < 16 {
+		maxSecondaryWidth = 16
+	}
+	if maxSecondaryWidth > 48 {
+		maxSecondaryWidth = 48
+	}
+
+	availableSecondaryWidth := width - minPrimaryWidth - gap
+	if availableSecondaryWidth < 0 {
+		availableSecondaryWidth = 0
+	}
+	if maxSecondaryWidth > availableSecondaryWidth {
+		maxSecondaryWidth = availableSecondaryWidth
+	}
+
+	secondary = truncateRunes(secondary, maxSecondaryWidth)
+	secondaryWidth := utf8.RuneCountInString(secondary)
+	if secondaryWidth == 0 {
+		return utf8.RuneCountInString(truncateRunes(primary, width))
+	}
+
+	primaryWidth := width - secondaryWidth - gap
+	if primaryWidth < 1 {
+		return utf8.RuneCountInString(truncateRunes(primary, width))
+	}
+	left := truncateRunes(primary, primaryWidth)
+	return utf8.RuneCountInString(left) + gap
 }
 
 func (m *PickerModel) moveCursor(delta int) {
@@ -698,13 +837,21 @@ func (m PickerModel) detailLine(detail, hint string, width int, detailStyle, hin
 
 	hintWidth := utf8.RuneCountInString(hint)
 	detailWidth := contentWidth - hintWidth - 2
-	if detailWidth < 12 {
-		detailWidth = 12
+	if detailWidth < 1 {
+		detailWidth = 1
 	}
 	left := truncateRunes(detail, detailWidth)
 	padding := contentWidth - utf8.RuneCountInString(left) - hintWidth
 	if padding < 1 {
 		padding = 1
+	}
+	if utf8.RuneCountInString(left)+padding+hintWidth > contentWidth {
+		hint = truncateRunes(hint, maxInt(1, contentWidth-utf8.RuneCountInString(left)-1))
+		hintWidth = utf8.RuneCountInString(hint)
+		padding = contentWidth - utf8.RuneCountInString(left) - hintWidth
+		if padding < 1 {
+			padding = 1
+		}
 	}
 	return "    " + detailStyle.Render(left) + strings.Repeat(" ", padding) + hintStyle.Render(hint)
 }

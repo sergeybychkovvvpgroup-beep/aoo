@@ -89,6 +89,9 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if cfg.ShowListOnStart {
 		t.Fatal("expected show list on start default to be false")
 	}
+	if !cfg.TwoLineResults {
+		t.Fatal("expected two line results default to be true")
+	}
 
 	path, err := ConfigPath()
 	if err != nil {
@@ -120,6 +123,9 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "show_list_on_start: false") {
 		t.Fatalf("expected show_list_on_start in config, got %q", text)
 	}
+	if !strings.Contains(text, "two_line_results: true") {
+		t.Fatalf("expected two_line_results in config, got %q", text)
+	}
 }
 
 func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
@@ -142,6 +148,7 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 		"picker_height: 14",
 		"show_match_context: false",
 		"show_list_on_start: true",
+		"two_line_results: false",
 		"",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
@@ -158,6 +165,9 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	if !cfg.ShowListOnStart {
 		t.Fatal("expected show_list_on_start to be loaded from config")
 	}
+	if cfg.TwoLineResults {
+		t.Fatal("expected two_line_results to be loaded from config")
+	}
 
 	updated, err := os.ReadFile(path)
 	if err != nil {
@@ -171,6 +181,9 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	}
 	if !strings.Contains(string(updated), "show_list_on_start: true") {
 		t.Fatalf("expected rewritten config to contain show_list_on_start, got %q", string(updated))
+	}
+	if !strings.Contains(string(updated), "two_line_results: false") {
+		t.Fatalf("expected rewritten config to contain two_line_results, got %q", string(updated))
 	}
 }
 

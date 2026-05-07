@@ -23,12 +23,14 @@ full_screen: true
 picker_height: 14
 show_match_context: false
 show_list_on_start: true
+two_line_results: true
 ```
 
 Что значат ключи:
 
 - `show_match_context` показывает строку с найденным фрагментом у выбранной записи
 - `show_list_on_start` сразу показывает список при пустом запросе
+- `two_line_results` включает двухстрочный список; если `false`, `desc` и команда/текст идут в одной строке
 
 Проверка:
 
