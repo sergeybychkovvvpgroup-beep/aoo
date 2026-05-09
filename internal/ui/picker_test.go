@@ -52,7 +52,7 @@ func TestBottomLayoutPlacesInputAtBottom(t *testing.T) {
 		t.Fatalf("expected multiline view, got %q", view)
 	}
 	lastLines := strings.Join(lines[maxInt(0, len(lines)-4):], "\n")
-	if !strings.Contains(lastLines, "notes> static") {
+	if !strings.Contains(lastLines, "> static") {
 		t.Fatalf("expected input block near bottom, got %q", lastLines)
 	}
 	if !strings.Contains(lastLines, "enter open") {
@@ -112,6 +112,27 @@ func TestViewShowsResultsOnEmptyQueryWhenEnabled(t *testing.T) {
 	view := model.View()
 	if !strings.Contains(view, "router notes") {
 		t.Fatalf("expected visible notes on empty query, got %q", view)
+	}
+}
+
+func TestFocusModeHidesHotkeyFooter(t *testing.T) {
+	model := PickerModel{
+		input: textInputWithValue("git"),
+		matches: []notes.Match{
+			{Entry: notes.Entry{Desc: "git release"}, Label: "git release", Detail: "script"},
+		},
+		height:  8,
+		width:   80,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		options: Options{Layout: "bottom", FocusMode: true},
+	}
+
+	view := model.View()
+	if strings.Contains(view, "enter open") {
+		t.Fatalf("expected focus mode to hide footer, got %q", view)
+	}
+	if !strings.Contains(view, "> git") {
+		t.Fatalf("expected input to remain visible in focus mode, got %q", view)
 	}
 }
 
@@ -739,7 +760,7 @@ func TestSelectedCommandPreviewDoesNotDuplicatePrefix(t *testing.T) {
 
 func textInputWithValue(value string) textinput.Model {
 	input := textinput.New()
-	input.Prompt = "notes> "
+	input.Prompt = "> "
 	input.SetValue(value)
 	return input
 }

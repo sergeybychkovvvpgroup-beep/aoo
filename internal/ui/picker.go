@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"aoo/internal/notes"
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,15 +38,17 @@ type syncPollMsg struct{}
 
 func NewPicker(entries []notes.Entry, initialQuery string, theme Theme, options Options) PickerModel {
 	input := textinput.New()
-	input.Placeholder = "search"
-	input.Prompt = "notes> "
+	input.Placeholder = ""
+	input.Prompt = "> "
 	input.SetValue(initialQuery)
 	input.Focus()
 	input.CharLimit = 256
 	input.Width = 48
-	input.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.InputFG))
-	input.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.InputPrompt))
+	input.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.RowFG))
+	input.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.TitleDimFG))
 	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.HelpFG))
+	input.Cursor.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.RowFG))
+	input.Cursor.SetMode(cursor.CursorStatic)
 
 	m := PickerModel{
 		input:        input,
@@ -61,7 +64,7 @@ func NewPicker(entries []notes.Entry, initialQuery string, theme Theme, options 
 }
 
 func (m PickerModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{textinput.Blink}
+	cmds := []tea.Cmd{}
 	if m.syncStream != nil {
 		cmds = append(cmds, m.pollSyncStatus())
 	}
@@ -152,18 +155,13 @@ func (m PickerModel) View() string {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.DetailFG))
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HelpFG))
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TitleFG))
-	inputBox := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.InputFG)).
-		Background(lipgloss.Color(m.theme.InputBG)).
-		Padding(0, 0)
 	containerStyle := lipgloss.NewStyle().Width(m.contentWidth()).MaxWidth(m.contentWidth())
 	contentWidth := m.contentWidth()
 	effectiveHeight := m.effectiveHeight()
 
 	input := m.input
 	input.Width = m.inputWidth()
-	inputLine := inputBox.Render(input.View())
-	helpLine := helpStyle.Render(truncateRunes(pickerHelpText(), contentWidth))
+	inputLine := truncateRunes(input.View(), contentWidth)
 	lines := make([]string, 0, maxInt(6, effectiveHeight))
 
 	if m.isBottomLayout() {
@@ -174,7 +172,10 @@ func (m PickerModel) View() string {
 		}
 		lines = append(lines, resultBlock...)
 		lines = append(lines, truncateRunes(m.renderStatusBar(titleStyle), contentWidth))
-		lines = append(lines, helpLine, inputLine)
+		if !m.options.FocusMode {
+			lines = append(lines, helpStyle.Render(truncateRunes(pickerHelpText(), contentWidth)))
+		}
+		lines = append(lines, inputLine)
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			padding := make([]string, 0, effectiveHeight-len(lines))
 			for len(lines)+len(padding) < effectiveHeight {
@@ -190,7 +191,9 @@ func (m PickerModel) View() string {
 		}
 		lines = append(lines, "")
 		lines = append(lines, truncateRunes(m.renderStatusBar(titleStyle), contentWidth))
-		lines = append(lines, helpLine)
+		if !m.options.FocusMode {
+			lines = append(lines, helpStyle.Render(truncateRunes(pickerHelpText(), contentWidth)))
+		}
 		if effectiveHeight > 0 && len(lines) < effectiveHeight {
 			fillerAt := len(lines) - 1
 			padding := make([]string, 0, effectiveHeight-len(lines))
@@ -201,6 +204,7 @@ func (m PickerModel) View() string {
 		}
 	}
 
+	lines = normalizeRenderedLines(lines, contentWidth)
 	mainView := containerStyle.
 		Height(maxInt(4, effectiveHeight)).
 		MaxHeight(maxInt(4, effectiveHeight)).
@@ -546,6 +550,18 @@ func padRight(value string, width int) string {
 		return value
 	}
 	return value + strings.Repeat(" ", width-length)
+}
+
+func normalizeRenderedLines(lines []string, width int) []string {
+	if width <= 0 {
+		return lines
+	}
+	style := lipgloss.NewStyle().Width(width).MaxWidth(width)
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		out = append(out, style.Render(line))
+	}
+	return out
 }
 
 func (m *PickerModel) advancePreviewHit(delta int) {

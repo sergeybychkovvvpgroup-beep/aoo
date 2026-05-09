@@ -24,6 +24,7 @@ type File struct {
 	Layout           string `yaml:"layout"`
 	FullScreen       bool   `yaml:"full_screen"`
 	PickerHeight     int    `yaml:"picker_height"`
+	FocusMode        bool   `yaml:"focus_mode"`
 	ShowMatchContext bool   `yaml:"show_match_context"`
 	ShowListOnStart  bool   `yaml:"show_list_on_start"`
 	TwoLineResults   bool   `yaml:"two_line_results"`
@@ -36,6 +37,7 @@ type rawFile struct {
 	Layout              string `yaml:"layout"`
 	FullScreen          *bool  `yaml:"full_screen"`
 	PickerHeight        *int   `yaml:"picker_height"`
+	FocusMode           *bool  `yaml:"focus_mode"`
 	ShowMatchContext    *bool  `yaml:"show_match_context"`
 	ShowListOnStart     *bool  `yaml:"show_list_on_start"`
 	TwoLineResults      *bool  `yaml:"two_line_results"`
@@ -84,6 +86,7 @@ func DefaultFile() File {
 		Layout:           "bottom",
 		FullScreen:       true,
 		PickerHeight:     14,
+		FocusMode:        false,
 		ShowMatchContext: false,
 		ShowListOnStart:  false,
 		TwoLineResults:   true,
@@ -127,6 +130,9 @@ func Load() (File, error) {
 	}
 	if parsed.PickerHeight != nil {
 		cfg.PickerHeight = *parsed.PickerHeight
+	}
+	if parsed.FocusMode != nil {
+		cfg.FocusMode = *parsed.FocusMode
 	}
 	if parsed.ShowMatchContext != nil {
 		cfg.ShowMatchContext = *parsed.ShowMatchContext
@@ -309,6 +315,7 @@ func renderConfig(cfg File) string {
 		"# aoo",
 		"# themes: fzf-dark, catppuccin-mocha, catppuccin-latte, dracula, nord, solarized-dark, solarized-light",
 		"# layout: top | bottom",
+		"# focus_mode: hide hotkeys/help footer for a quieter UI",
 		"# show_match_context: preview line for selected item",
 		"# show_list_on_start: render results when query is empty",
 		"# two_line_results: desc on first line, command/text on second line",
@@ -318,6 +325,7 @@ func renderConfig(cfg File) string {
 		"layout: " + yamlScalar(cfg.Layout),
 		"full_screen: " + yamlScalarBool(cfg.FullScreen),
 		"picker_height: " + strconv.Itoa(cfg.PickerHeight),
+		"focus_mode: " + yamlScalarBool(cfg.FocusMode),
 		"show_match_context: " + yamlScalarBool(cfg.ShowMatchContext),
 		"show_list_on_start: " + yamlScalarBool(cfg.ShowListOnStart),
 		"two_line_results: " + yamlScalarBool(cfg.TwoLineResults),
@@ -343,6 +351,9 @@ func configNeedsRewrite(raw []byte, cfg File) bool {
 	}
 
 	if !strings.Contains(text, "show_match_context:") {
+		return true
+	}
+	if !strings.Contains(text, "focus_mode:") {
 		return true
 	}
 	if !strings.Contains(text, "show_list_on_start:") {

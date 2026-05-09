@@ -18,6 +18,7 @@ type SyncStatus struct {
 type Options struct {
 	FullScreen        bool
 	Height            int
+	FocusMode         bool
 	ShowMatchContext  bool
 	ShowListOnStart   bool
 	SingleLineResults bool

@@ -94,6 +94,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 	uiOptions := ui.Options{
 		FullScreen:        cfg.FullScreen,
 		Height:            cfg.PickerHeight,
+		FocusMode:         cfg.FocusMode,
 		ShowMatchContext:  cfg.ShowMatchContext,
 		ShowListOnStart:   cfg.ShowListOnStart,
 		SingleLineResults: !cfg.TwoLineResults,
@@ -366,6 +367,7 @@ func runConfigShow(stdout io.Writer) error {
 	fmt.Fprintf(stdout, "layout: %s\n", cfg.Layout)
 	fmt.Fprintf(stdout, "full_screen: %t\n", cfg.FullScreen)
 	fmt.Fprintf(stdout, "picker_height: %d\n", cfg.PickerHeight)
+	fmt.Fprintf(stdout, "focus_mode: %t\n", cfg.FocusMode)
 	fmt.Fprintf(stdout, "show_match_context: %t\n", cfg.ShowMatchContext)
 	fmt.Fprintf(stdout, "show_list_on_start: %t\n", cfg.ShowListOnStart)
 	fmt.Fprintf(stdout, "two_line_results: %t\n", cfg.TwoLineResults)

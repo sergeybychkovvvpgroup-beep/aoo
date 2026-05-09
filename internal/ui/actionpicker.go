@@ -124,7 +124,10 @@ func (m ActionPickerModel) View() string {
 		}
 	}
 	lines = append(lines, titleStyle.Render(truncateRunes(m.statusLine(), contentWidth)))
-	lines = append(lines, helpStyle.Render(truncateRunes("enter choose  esc back  ↑↓ move", contentWidth)))
+	if !m.options.FocusMode {
+		lines = append(lines, helpStyle.Render(truncateRunes("enter choose  esc back  ↑↓ move", contentWidth)))
+	}
+	lines = normalizeRenderedLines(lines, contentWidth)
 	return strings.Join(lines, "\n")
 }
 

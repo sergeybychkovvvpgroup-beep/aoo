@@ -21,12 +21,16 @@ theme: fzf-dark
 layout: bottom
 full_screen: true
 picker_height: 14
+focus_mode: false
 show_match_context: false
 show_list_on_start: true
+two_line_results: true
 ```
 
+- `focus_mode` hides the hotkey footer for a cleaner picker
 - `show_match_context` shows the matched line for the selected entry
 - `show_list_on_start` shows notes immediately with an empty query
+- `two_line_results` keeps description and command/text on separate lines
 
 ```bash
 aoo config

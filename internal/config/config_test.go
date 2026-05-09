@@ -86,6 +86,9 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if cfg.ShowMatchContext {
 		t.Fatal("expected show match context default to be false")
 	}
+	if cfg.FocusMode {
+		t.Fatal("expected focus mode default to be false")
+	}
 	if cfg.ShowListOnStart {
 		t.Fatal("expected show list on start default to be false")
 	}
@@ -117,6 +120,9 @@ func TestLoadCreatesCommentedConfigWithDefaults(t *testing.T) {
 	if !strings.Contains(text, "full_screen: true") {
 		t.Fatalf("expected full screen in config, got %q", text)
 	}
+	if !strings.Contains(text, "focus_mode: false") {
+		t.Fatalf("expected focus_mode in config, got %q", text)
+	}
 	if !strings.Contains(text, "show_match_context: false") {
 		t.Fatalf("expected show_match_context in config, got %q", text)
 	}
@@ -146,6 +152,7 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 		"layout: bottom",
 		"full_screen: true",
 		"picker_height: 14",
+		"focus_mode: true",
 		"show_match_context: false",
 		"show_list_on_start: true",
 		"two_line_results: false",
@@ -161,6 +168,9 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	}
 	if cfg.Layout != "bottom" {
 		t.Fatalf("expected bottom layout, got %q", cfg.Layout)
+	}
+	if !cfg.FocusMode {
+		t.Fatal("expected focus_mode to be loaded from config")
 	}
 	if !cfg.ShowListOnStart {
 		t.Fatal("expected show_list_on_start to be loaded from config")
@@ -178,6 +188,9 @@ func TestLoadDoesNotReintroduceSearchModeIntoConfigFile(t *testing.T) {
 	}
 	if !strings.Contains(string(updated), "show_match_context: false") {
 		t.Fatalf("expected rewritten config to contain show_match_context, got %q", string(updated))
+	}
+	if !strings.Contains(string(updated), "focus_mode: true") {
+		t.Fatalf("expected rewritten config to contain focus_mode, got %q", string(updated))
 	}
 	if !strings.Contains(string(updated), "show_list_on_start: true") {
 		t.Fatalf("expected rewritten config to contain show_list_on_start, got %q", string(updated))

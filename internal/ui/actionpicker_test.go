@@ -116,6 +116,29 @@ func TestActionPickerRendersHintsForAllVisibleActions(t *testing.T) {
 	}
 }
 
+func TestActionPickerFocusModeHidesFooter(t *testing.T) {
+	entry := notes.Entry{
+		Desc: "himki",
+		Actions: []notes.Action{
+			{Desc: "show", Text: "Host notes"},
+		},
+	}
+
+	model := ActionPickerModel{
+		entry:   entry,
+		actions: entryActions(entry),
+		width:   80,
+		height:  10,
+		theme:   Theme{SelectedMark: ">", RowFG: "7", SelectedFG: "15", SelectedBG: "0", HelpFG: "8"},
+		options: Options{FocusMode: true},
+	}
+
+	view := model.View()
+	if strings.Contains(view, "enter choose") {
+		t.Fatalf("expected focus mode to hide action footer, got %q", view)
+	}
+}
+
 func TestActionDetailLineShrinksHintOnNarrowWidth(t *testing.T) {
 	model := ActionPickerModel{}
 	line := model.detailLine(

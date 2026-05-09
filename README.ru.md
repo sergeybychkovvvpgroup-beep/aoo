@@ -21,6 +21,7 @@ theme: fzf-dark
 layout: bottom
 full_screen: true
 picker_height: 14
+focus_mode: false
 show_match_context: false
 show_list_on_start: true
 two_line_results: true
@@ -28,6 +29,7 @@ two_line_results: true
 
 Что значат ключи:
 
+- `focus_mode` скрывает нижнюю строку с хоткеями для более спокойного интерфейса
 - `show_match_context` показывает строку с найденным фрагментом у выбранной записи
 - `show_list_on_start` сразу показывает список при пустом запросе
 - `two_line_results` включает двухстрочный список; если `false`, `desc` и команда/текст идут в одной строке
