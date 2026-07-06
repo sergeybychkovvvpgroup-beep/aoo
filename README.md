@@ -1,12 +1,12 @@
-# aoo
+# f
 
-Terminal notes and command launcher.
+Terminal notes and command launcher. The project was formerly called `aoo`; `aoo` is still installed as a compatibility symlink.
 
 ## Install
 
 ```bash
 make build
-sudo install -m 0755 bin/aoo /usr/local/bin/aoo
+sudo make install
 ```
 
 ## Config
@@ -33,18 +33,19 @@ two_line_results: true
 - `two_line_results` keeps description and command/text on separate lines
 
 ```bash
-aoo config
-aoo config show
+f config
+f config show
 ```
 
 ## Usage
 
 ```bash
-aoo
-aoo --query ssh
-aoo validate --dir ~/.local/share/aoo/notes
-aoo add "router dhcp"
-aoo add cmd "restart nginx"
+f
+f --query ssh
+f validate --dir ~/.local/share/aoo/notes
+f add "router dhcp"
+f add cmd "restart nginx"
+f upgrade
 ```
 
 Keys:
@@ -56,13 +57,22 @@ Keys:
 
 ## Note format
 
-```yaml
-- desc: ssh router
-  text: main access
-  cmd: ssh admin@router
+Prefer one note per file, for example `ssh-router.yaml`:
 
-- desc: nginx logs
-  cmd: journalctl -u nginx -n 100
+```yaml
+desc: ssh router
+actions:
+  - desc: main access
+    text: ssh command for router
+  - desc: connect
+    cmd: ssh admin@router
+```
+
+Simple command-only files are also valid:
+
+```yaml
+desc: nginx logs
+cmd: journalctl -u nginx -n 100
 ```
 
 If a note has `cmd`, `Enter` runs it. If it has only `text`, `Enter` prints the note.

@@ -1,12 +1,12 @@
-# aoo
+# f
 
-Терминальная утилита для заметок и запуска команд.
+Терминальная утилита для заметок и запуска команд. Раньше проект назывался `aoo`; `aoo` всё ещё ставится как совместимый symlink.
 
 ## Установка
 
 ```bash
 make build
-sudo install -m 0755 bin/aoo /usr/local/bin/aoo
+sudo make install
 ```
 
 ## Конфиг
@@ -37,18 +37,19 @@ two_line_results: true
 Проверка:
 
 ```bash
-aoo config
-aoo config show
+f config
+f config show
 ```
 
 ## Использование
 
 ```bash
-aoo
-aoo --query ssh
-aoo validate --dir ~/.local/share/aoo/notes
-aoo add "router dhcp"
-aoo add cmd "restart nginx"
+f
+f --query ssh
+f validate --dir ~/.local/share/aoo/notes
+f add "router dhcp"
+f add cmd "restart nginx"
+f upgrade
 ```
 
 Горячие клавиши:
@@ -60,13 +61,22 @@ aoo add cmd "restart nginx"
 
 ## Формат заметок
 
-```yaml
-- desc: ssh router
-  text: основной доступ
-  cmd: ssh admin@router
+Лучше хранить одну заметку в одном файле, например `ssh-router.yaml`:
 
-- desc: nginx logs
-  cmd: journalctl -u nginx -n 100
+```yaml
+desc: ssh router
+actions:
+  - desc: основной доступ
+    text: ssh-команда для роутера
+  - desc: подключиться
+    cmd: ssh admin@router
+```
+
+Простой файл с одной командой тоже валиден:
+
+```yaml
+desc: nginx logs
+cmd: journalctl -u nginx -n 100
 ```
 
 Если у записи есть `cmd`, `Enter` запускает команду. Если есть только `text`, `Enter` показывает заметку.

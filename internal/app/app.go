@@ -38,8 +38,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			return runSetTheme(args[1:], stdout, stderr)
 		case "add":
 			return runAdd(args[1:], stdout, stderr)
+		case "upgrade":
+			return runUpgrade(args[1:], stdout, stderr)
 		case "version", "--version", "-v":
-			_, err := fmt.Fprintf(stdout, "aoo %s\n", version)
+			_, err := fmt.Fprintf(stdout, "%s %s\n", cliName(), version)
 			return err
 		case "help", "--help", "-h":
 			printUsage(stdout)
@@ -503,6 +505,138 @@ func printActionText(entry notes.Entry, action *notes.Action, stdout io.Writer) 
 	fmt.Fprintln(stdout, strings.TrimRight(action.Text, "\n"))
 }
 
+func runUpgrade(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repoURL := fs.String("repo", defaultUpgradeRepo(), "git repository URL")
+	workDir := fs.String("workdir", "", "source checkout directory")
+	binPath := fs.String("bin", "", "target binary path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	target := strings.TrimSpace(*binPath)
+	if target == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		target, err = filepath.EvalSymlinks(exe)
+		if err != nil {
+			target = exe
+		}
+	}
+	if strings.TrimSpace(target) == "" {
+		return errors.New("cannot detect target binary path")
+	}
+
+	dir := strings.TrimSpace(*workDir)
+	if dir == "" {
+		cacheDir, err := os.UserCacheDir()
+		if err != nil {
+			return err
+		}
+		dir = filepath.Join(cacheDir, "aoo", "source")
+	}
+
+	fmt.Fprintf(stdout, "[upgrade] repo: %s\n", safeRepoURL(*repoURL))
+	fmt.Fprintf(stdout, "[upgrade] source: %s\n", dir)
+	fmt.Fprintf(stdout, "[upgrade] target: %s\n", target)
+
+	if err := ensureUpgradeCheckout(dir, *repoURL, stdout, stderr); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", target, "./cmd/f")
+	cmd.Dir = dir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("go build upgrade: %w", err)
+	}
+
+	fmt.Fprintf(stdout, "[upgrade] done: %s\n", target)
+	return nil
+}
+
+func defaultUpgradeRepo() string {
+	if value := strings.TrimSpace(os.Getenv("AOO_UPGRADE_REPO")); value != "" {
+		return value
+	}
+	return "https://git.dawq.me/sergeyb/aoo.git"
+}
+
+func safeRepoURL(repoURL string) string {
+	if i := strings.Index(repoURL, "://"); i >= 0 {
+		schemeEnd := i + len("://")
+		rest := repoURL[schemeEnd:]
+		if at := strings.Index(rest, "@"); at >= 0 {
+			return repoURL[:schemeEnd] + "***@" + rest[at+1:]
+		}
+	}
+	return repoURL
+}
+
+func ensureUpgradeCheckout(dir, repoURL string, stdout, stderr io.Writer) error {
+	if strings.TrimSpace(repoURL) == "" {
+		return errors.New("upgrade repo URL is required")
+	}
+	if fileExists(filepath.Join(dir, ".git")) {
+		if err := runUpgradeGit(dir, stdout, stderr, "remote", "set-url", "origin", repoURL); err != nil {
+			return err
+		}
+		if err := runUpgradeGit(dir, stdout, stderr, "fetch", "--prune", "origin"); err != nil {
+			return err
+		}
+		branch := strings.TrimSpace(upgradeGitOutput(dir, "branch", "--show-current"))
+		if branch == "" {
+			branch = "main"
+		}
+		if err := runUpgradeGit(dir, stdout, stderr, "pull", "--ff-only", "origin", branch); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command("git", "clone", repoURL, dir)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd.Run()
+}
+
+func runUpgradeGit(dir string, stdout, stderr io.Writer, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return nil
+}
+
+func upgradeGitOutput(dir string, args ...string) string {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	var out strings.Builder
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return ""
+	}
+	return out.String()
+}
+
+func cliName() string {
+	name := strings.TrimSpace(filepath.Base(os.Args[0]))
+	if name == "" {
+		return "f"
+	}
+	return name
+}
+
 func renderBanner(title, message string) string {
 	lines := strings.Split(strings.TrimSpace(message), "\n")
 	width := len(title)
@@ -526,19 +660,21 @@ func renderBanner(title, message string) string {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "aoo")
+	name := cliName()
+	fmt.Fprintln(w, name)
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Terminal notes and command launcher.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Run `aoo` and search for `aoo-help`.")
+	fmt.Fprintf(w, "Run `%s` and search for `aoo-help`.\n", name)
 	fmt.Fprintln(w, "Built-in setup/help notes are available on a clean host.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Extra commands:")
-	fmt.Fprintln(w, "  aoo version")
-	fmt.Fprintln(w, "  aoo validate --dir PATH")
-	fmt.Fprintln(w, "  aoo add [title]")
-	fmt.Fprintln(w, "  aoo add cmd [title]")
-	fmt.Fprintln(w, "  aoo set-source")
+	fmt.Fprintf(w, "  %s version\n", name)
+	fmt.Fprintf(w, "  %s validate --dir PATH\n", name)
+	fmt.Fprintf(w, "  %s add [title]\n", name)
+	fmt.Fprintf(w, "  %s add cmd [title]\n", name)
+	fmt.Fprintf(w, "  %s set-source\n", name)
+	fmt.Fprintf(w, "  %s upgrade\n", name)
 }
 
 func printConfigUsage(w io.Writer) {

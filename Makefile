@@ -1,4 +1,5 @@
-APP := aoo
+APP := f
+LEGACY_APP := aoo
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 GOFLAGS ?= -buildvcs=false
@@ -8,14 +9,16 @@ GOFLAGS ?= -buildvcs=false
 build:
 	@echo "[build] compiling $(APP)"
 	@mkdir -p bin
-	@go build $(GOFLAGS) -o bin/$(APP) ./cmd/aoo
-	@echo "[build] done: bin/$(APP)"
+	@go build $(GOFLAGS) -o bin/$(APP) ./cmd/f
+	@go build $(GOFLAGS) -o bin/$(LEGACY_APP) ./cmd/aoo
+	@echo "[build] done: bin/$(APP), bin/$(LEGACY_APP)"
 
 install: build
 	@echo "[install] installing $(APP) to $(BINDIR)"
 	@install -d "$(BINDIR)"
 	@install -m 0755 bin/$(APP) "$(BINDIR)/$(APP)"
-	@echo "[install] done: $(BINDIR)/$(APP)"
+	@ln -sf "$(APP)" "$(BINDIR)/$(LEGACY_APP)"
+	@echo "[install] done: $(BINDIR)/$(APP) (and $(BINDIR)/$(LEGACY_APP) symlink)"
 
 update: install
 	@echo "[update] done"

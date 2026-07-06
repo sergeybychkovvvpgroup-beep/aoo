@@ -1,12 +1,14 @@
-- desc: aoo list themes
-  action: aoo themes
-- desc: aoo version
-  action: aoo version
-- desc: aoo make build
+- desc: f list themes
+  action: f themes
+- desc: f version
+  action: f version
+- desc: f upgrade
+  action: f upgrade
+- desc: f make build
   action: make build
-- desc: aoo make update
+- desc: f make update
   action: sudo make update
-- desc: aoo make test
+- desc: f make test
   action: make test
-- desc: aoo make validate
+- desc: f make validate
   action: make validate

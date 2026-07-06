@@ -7,9 +7,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: aoo
-    main: ./cmd/aoo
-    binary: aoo
+  - id: f
+    main: ./cmd/f
+    binary: f
     env:
       - CGO_ENABLED=0
     goos:
@@ -24,7 +24,7 @@ archives:
 
 nfpms:
   - id: packages
-    package_name: aoo
+    package_name: f
     vendor: Sergey Bychkov
     homepage: https://github.com/sergeybychkovvvpgroup-beep/aoo
     maintainer: Sergey Bychkov
