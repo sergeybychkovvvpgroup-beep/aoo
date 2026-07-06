@@ -25,6 +25,7 @@ type PickerModel struct {
 	selected     *notes.Entry
 	selectedLine int
 	edit         bool
+	printOnly    bool
 	createKind   string
 	previewHit   int
 	cancelled    bool
@@ -100,13 +101,14 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.cancelled = true
 			return m, tea.Quit
-		case "enter":
+		case "enter", "ctrl+enter":
 			if len(m.matches) == 0 {
 				return m, nil
 			}
 			entry := m.matches[m.cursor].Entry
 			m.selected = &entry
 			m.selectedLine = entry.PreviewHitLine(m.preview, m.activePreviewHit())
+			m.printOnly = msg.String() == "ctrl+enter"
 			return m, tea.Quit
 		case "ctrl+e", "alt+e":
 			if len(m.matches) == 0 {
@@ -234,6 +236,10 @@ func (m PickerModel) EditRequested() bool {
 	return m.edit
 }
 
+func (m PickerModel) PrintOnlyRequested() bool {
+	return m.printOnly
+}
+
 func (m PickerModel) CreateKind() string {
 	return m.createKind
 }
@@ -318,10 +324,10 @@ func (m PickerModel) maxVisibleItems() int {
 	return maxItems
 }
 
-func RunPicker(entries []notes.Entry, initialQuery string, themeName string, options Options) (*notes.Entry, int, string, bool, bool, string, error) {
+func RunPicker(entries []notes.Entry, initialQuery string, themeName string, options Options) (*notes.Entry, int, string, bool, bool, bool, string, error) {
 	theme, err := ResolveTheme(themeName)
 	if err != nil {
-		return nil, 0, initialQuery, false, false, "", err
+		return nil, 0, initialQuery, false, false, false, "", err
 	}
 
 	model := NewPicker(entries, initialQuery, theme, options)
@@ -332,15 +338,15 @@ func RunPicker(entries []notes.Entry, initialQuery string, themeName string, opt
 	program := tea.NewProgram(model, programOptions...)
 	result, err := program.Run()
 	if err != nil {
-		return nil, 0, initialQuery, false, false, "", fmt.Errorf("picker: %w", err)
+		return nil, 0, initialQuery, false, false, false, "", fmt.Errorf("picker: %w", err)
 	}
 
 	finalModel, ok := result.(PickerModel)
 	if !ok {
-		return nil, 0, initialQuery, false, false, "", fmt.Errorf("picker returned unexpected model type")
+		return nil, 0, initialQuery, false, false, false, "", fmt.Errorf("picker returned unexpected model type")
 	}
 
-	return finalModel.Selected(), finalModel.SelectedLine(), finalModel.Query(), finalModel.Cancelled(), finalModel.EditRequested(), finalModel.CreateKind(), nil
+	return finalModel.Selected(), finalModel.SelectedLine(), finalModel.Query(), finalModel.Cancelled(), finalModel.EditRequested(), finalModel.PrintOnlyRequested(), finalModel.CreateKind(), nil
 }
 
 func max(a, b int) int {
@@ -477,7 +483,7 @@ func (m PickerModel) syncStatusColor() string {
 
 func pickerHelpText() string {
 	return string([]rune{0x2191, 0x2193}) + " select  " +
-		string([]rune{0x2190, 0x2192}) + " hit  enter open  :cmd/>cmd commands  ctrl+n new  ctrl+e edit  esc quit"
+		string([]rune{0x2190, 0x2192}) + " hit  enter open/run  ctrl+enter print cmd  :/> commands  ctrl+n new  ctrl+e edit  esc quit"
 }
 
 func wrapText(value string, width int) []string {

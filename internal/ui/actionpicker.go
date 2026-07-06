@@ -31,6 +31,7 @@ type ActionPickerModel struct {
 	width     int
 	height    int
 	selected  *EntryAction
+	printOnly bool
 	cancelled bool
 	theme     Theme
 }
@@ -59,12 +60,13 @@ func (m ActionPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.cancelled = true
 			return m, tea.Quit
-		case "enter":
+		case "enter", "ctrl+enter":
 			if len(m.actions) == 0 {
 				return m, nil
 			}
 			action := m.actions[m.cursor]
 			m.selected = &action
+			m.printOnly = msg.String() == "ctrl+enter"
 			return m, tea.Quit
 		case "up", "ctrl+k":
 			if m.cursor > 0 {
@@ -125,7 +127,7 @@ func (m ActionPickerModel) View() string {
 	}
 	lines = append(lines, titleStyle.Render(truncateRunes(m.statusLine(), contentWidth)))
 	if !m.options.FocusMode {
-		lines = append(lines, helpStyle.Render(truncateRunes("enter choose  esc back  ↑↓ move", contentWidth)))
+		lines = append(lines, helpStyle.Render(truncateRunes("enter choose  ctrl+enter print cmd  esc back  ↑↓ move", contentWidth)))
 	}
 	lines = normalizeRenderedLines(lines, contentWidth)
 	return strings.Join(lines, "\n")
@@ -137,6 +139,10 @@ func (m ActionPickerModel) Selected() *EntryAction {
 
 func (m ActionPickerModel) Cancelled() bool {
 	return m.cancelled
+}
+
+func (m ActionPickerModel) PrintOnlyRequested() bool {
+	return m.printOnly
 }
 
 func (m ActionPickerModel) contentWidth() int {
@@ -214,10 +220,10 @@ func (m ActionPickerModel) statusLine() string {
 	return fmt.Sprintf("%d/%d", minInt(m.cursor+1, len(m.actions)), len(m.actions))
 }
 
-func RunActionPicker(entry notes.Entry, themeName string, options Options) (*EntryAction, bool, error) {
+func RunActionPicker(entry notes.Entry, themeName string, options Options) (*EntryAction, bool, bool, error) {
 	theme, err := ResolveTheme(themeName)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
 
 	model := NewActionPicker(entry, theme, options)
@@ -228,15 +234,15 @@ func RunActionPicker(entry notes.Entry, themeName string, options Options) (*Ent
 	program := tea.NewProgram(model, programOptions...)
 	result, err := program.Run()
 	if err != nil {
-		return nil, false, fmt.Errorf("action picker: %w", err)
+		return nil, false, false, fmt.Errorf("action picker: %w", err)
 	}
 
 	finalModel, ok := result.(ActionPickerModel)
 	if !ok {
-		return nil, false, fmt.Errorf("action picker returned unexpected model type")
+		return nil, false, false, fmt.Errorf("action picker returned unexpected model type")
 	}
 
-	return finalModel.Selected(), finalModel.Cancelled(), nil
+	return finalModel.Selected(), finalModel.Cancelled(), finalModel.PrintOnlyRequested(), nil
 }
 
 func entryActions(entry notes.Entry) []EntryAction {

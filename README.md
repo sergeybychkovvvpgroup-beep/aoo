@@ -51,6 +51,7 @@ f upgrade
 Keys:
 
 - `Enter` open or run
+- `Ctrl+Enter` print the command to the terminal without running it, so it can be copied
 - `Ctrl+E` edit
 - `Ctrl+N` create a new note from current query
 - `Esc` quit

@@ -120,7 +120,7 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		if hasActiveUI && !uiOptions.FullScreen {
 			clearInteractiveArea(stdout, uiOptions.Height)
 		}
-		selected, selectedLine, nextQuery, cancelled, editRequested, createKind, err := ui.RunPicker(result.Entries, currentQuery, themeName, uiOptions)
+		selected, selectedLine, nextQuery, cancelled, editRequested, printOnlyRequested, createKind, err := ui.RunPicker(result.Entries, currentQuery, themeName, uiOptions)
 		hasActiveUI = true
 		currentQuery = nextQuery
 		if err != nil {
@@ -146,6 +146,9 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		}
 
 		if action := selected.QuickAction(); action != nil {
+			if printOnlyRequested {
+				return printActionCommand(*selected, action, stdout)
+			}
 			switch {
 			case action.IsShow():
 				printActionText(*selected, action, stdout)
@@ -158,12 +161,16 @@ func runInteractive(args []string, stdin io.Reader, stdout, stderr io.Writer) (e
 		if !uiOptions.FullScreen {
 			clearInteractiveArea(stdout, uiOptions.Height)
 		}
-		action, cancelled, err := ui.RunActionPicker(*selected, themeName, uiOptions)
+		action, cancelled, actionPrintOnly, err := ui.RunActionPicker(*selected, themeName, uiOptions)
 		if err != nil {
 			return err
 		}
 		if cancelled || action == nil {
 			continue
+		}
+
+		if printOnlyRequested || actionPrintOnly {
+			return printActionCommand(*selected, action.Action, stdout)
 		}
 
 		switch action.Kind {
@@ -503,6 +510,18 @@ func printActionText(entry notes.Entry, action *notes.Action, stdout io.Writer) 
 	}
 	fmt.Fprintln(stdout, entry.DisplayName())
 	fmt.Fprintln(stdout, strings.TrimRight(action.Text, "\n"))
+}
+
+func printActionCommand(entry notes.Entry, action *notes.Action, stdout io.Writer) error {
+	if action == nil {
+		return errors.New("selected action is empty")
+	}
+	if !action.IsCmd() {
+		printActionText(entry, action, stdout)
+		return nil
+	}
+	fmt.Fprintln(stdout, strings.TrimSpace(action.Cmd))
+	return nil
 }
 
 func runUpgrade(args []string, stdout, stderr io.Writer) error {
