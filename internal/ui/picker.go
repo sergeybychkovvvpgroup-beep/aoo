@@ -101,14 +101,14 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.cancelled = true
 			return m, tea.Quit
-		case "enter", "ctrl+enter":
+		case "enter", "ctrl+enter", "alt+enter", "ctrl+y":
 			if len(m.matches) == 0 {
 				return m, nil
 			}
 			entry := m.matches[m.cursor].Entry
 			m.selected = &entry
 			m.selectedLine = entry.PreviewHitLine(m.preview, m.activePreviewHit())
-			m.printOnly = msg.String() == "ctrl+enter"
+			m.printOnly = isPrintOnlyKey(msg.String())
 			return m, tea.Quit
 		case "ctrl+e", "alt+e":
 			if len(m.matches) == 0 {
@@ -483,7 +483,16 @@ func (m PickerModel) syncStatusColor() string {
 
 func pickerHelpText() string {
 	return string([]rune{0x2191, 0x2193}) + " select  " +
-		string([]rune{0x2190, 0x2192}) + " hit  enter open/run  ctrl+enter print cmd  :/> commands  ctrl+n new  ctrl+e edit  esc quit"
+		string([]rune{0x2190, 0x2192}) + " hit  enter open/run  alt+enter/ctrl+y print cmd  :/> commands  ctrl+n new  ctrl+e edit  esc quit"
+}
+
+func isPrintOnlyKey(key string) bool {
+	switch key {
+	case "ctrl+enter", "alt+enter", "ctrl+y":
+		return true
+	default:
+		return false
+	}
 }
 
 func wrapText(value string, width int) []string {

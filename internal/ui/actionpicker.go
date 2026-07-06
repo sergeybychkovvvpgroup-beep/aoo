@@ -60,13 +60,13 @@ func (m ActionPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.cancelled = true
 			return m, tea.Quit
-		case "enter", "ctrl+enter":
+		case "enter", "ctrl+enter", "alt+enter", "ctrl+y":
 			if len(m.actions) == 0 {
 				return m, nil
 			}
 			action := m.actions[m.cursor]
 			m.selected = &action
-			m.printOnly = msg.String() == "ctrl+enter"
+			m.printOnly = isPrintOnlyKey(msg.String())
 			return m, tea.Quit
 		case "up", "ctrl+k":
 			if m.cursor > 0 {
@@ -127,7 +127,7 @@ func (m ActionPickerModel) View() string {
 	}
 	lines = append(lines, titleStyle.Render(truncateRunes(m.statusLine(), contentWidth)))
 	if !m.options.FocusMode {
-		lines = append(lines, helpStyle.Render(truncateRunes("enter choose  ctrl+enter print cmd  esc back  ↑↓ move", contentWidth)))
+		lines = append(lines, helpStyle.Render(truncateRunes("enter choose  alt+enter/ctrl+y print cmd  esc back  ↑↓ move", contentWidth)))
 	}
 	lines = normalizeRenderedLines(lines, contentWidth)
 	return strings.Join(lines, "\n")
